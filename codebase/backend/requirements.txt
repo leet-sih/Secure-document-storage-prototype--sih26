@@ -1,0 +1,34 @@
+# ─── Web framework ───
+Flask==3.0.*
+flask-smorest==0.44.*          # OpenAPI/Swagger + blueprint routing
+marshmallow==3.22.*            # request/response validation & serialization
+
+# ─── Database ───
+Flask-SQLAlchemy==3.1.*
+Flask-Migrate==4.0.*           # Alembic wrapper
+psycopg[binary]==3.2.*         # SYNC PostgreSQL driver (NOT asyncpg)
+
+# ─── Auth / security ───
+flask-jwt-extended==4.7.*      # JWT access tokens
+flask-limiter==3.8.*           # in-memory rate limiting (no Redis for the prototype)
+bcrypt==4.2.*
+pyotp==2.9.*                   # TOTP MFA
+qrcode[pil]==8.0.*             # MFA setup QR codes
+cryptography==43.*             # AES-256-GCM, HKDF, Ed25519
+
+# ─── Utilities ───
+python-magic==0.4.*            # MIME detection by magic bytes
+Flask-Cors==5.0.*
+python-dotenv==1.0.*
+
+# ─── Dev / test ───
+pytest==8.3.*
+pytest-flask==1.3.*
+ruff==0.7.*
+black==24.*
+
+# ─── DEFERRED to production (do NOT need for the prototype) ───
+# minio          -> object storage (we use the local filesystem for now)
+# hvac           -> HashiCorp Vault (we use a local file KMS for now)
+# celery, redis  -> background jobs / cache (we run cleanup synchronously for now)
+# gunicorn       -> prod WSGI server (we use `flask run` in the prototype)

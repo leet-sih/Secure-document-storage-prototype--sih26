@@ -1,0 +1,4 @@
+/* index.css — Tailwind entry. Global base styles go under @layer base. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

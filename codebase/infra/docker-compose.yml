@@ -1,0 +1,46 @@
+# docker-compose.yml — PROTOTYPE stack.
+#
+# The prototype needs only ONE service: PostgreSQL. The backend (Flask) and frontend (Vite)
+# run directly on your machine for fast hot-reload — see ../SETUP.md.
+#
+#   Start the database:   docker compose -f infra/docker-compose.yml up postgres
+#
+# Encrypted chunks and master keys are stored on your local disk (./backend/data/*), so there
+# is no MinIO / Vault / Redis / Celery / Nginx to run yet. Those come back when we scale up
+# (see docs/ARCHITECTURE.md "Future / production").
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"        # exposed so the local backend can connect
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── OPTIONAL: run the whole stack in Docker instead of locally ──
+  # Uncomment to build backend + frontend as containers too. Most of the team should just run
+  # them locally (SETUP.md Path B); this is here for a one-command demo.
+  #
+  # backend:
+  #   build: ../backend
+  #   env_file: ../.env
+  #   depends_on:
+  #     postgres: { condition: service_healthy }
+  #   ports: ["5000:5000"]
+  #   volumes: ["../backend/data:/app/data"]   # persist local chunks/keys
+  #
+  # frontend:
+  #   build: ../frontend
+  #   ports: ["5173:80"]
+
+volumes:
+  postgres-data:
