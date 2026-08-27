@@ -25,3 +25,34 @@ date: 2026-08-27T00:00:00Z
 | Shell (top bar + sidebar) | codebase/frontend/src/components/AppShell.tsx |
 | Step-up MFA / Share / Confirm modals | codebase/frontend/src/components/StepUpMfaModal.tsx, ShareModal.tsx, ConfirmModal.tsx |
 | Types & routes reference | codebase/frontend/src/types/index.ts, src/App.tsx |
+
+## Screen JSX reference files
+
+These extracted JSX files in `design/screens/` are for agent reference. Read the matching
+file before implementing any page — it contains the exact layout, colors, and component
+structure to reproduce in React/TypeScript.
+
+| Screen | JSX reference file |
+|---|---|
+| Login + MFA step | design/screens/LoginPage.jsx |
+| MFA setup | design/screens/MfaSetupPage.jsx |
+| Public share access | design/screens/ShareAccessPage.jsx |
+| App shell (top bar) | design/screens/AppShell.jsx |
+| Dashboard | design/screens/DashboardPage.jsx |
+| Case detail | design/screens/CaseDetailPage.jsx |
+| Documents tab | design/screens/DocumentsTab.jsx |
+| Activity tab | design/screens/ActivityTab.jsx |
+| Members tab | design/screens/MembersTab.jsx |
+| Overview tab | design/screens/OverviewTab.jsx |
+| Document detail panel | design/screens/DocumentDetailPanel.jsx |
+| Search | design/screens/SearchPage.jsx |
+| Audit log | design/screens/AuditPage.jsx |
+| User admin | design/screens/UserAdminPage.jsx |
+| Profile | design/screens/ProfilePage.jsx |
+| Step-up MFA modal | design/screens/StepUpMfaModal.jsx |
+| Share modal | design/screens/ShareModal.jsx |
+| Create case modal | design/screens/CreateCaseModal.jsx |
+| Create user modal | design/screens/CreateUserModal.jsx |
+| Edit role modal | design/screens/EditRoleModal.jsx |
+| Confirm modal | design/screens/ConfirmModal.jsx |
+| Design tokens | design/screens/tokens.js |
