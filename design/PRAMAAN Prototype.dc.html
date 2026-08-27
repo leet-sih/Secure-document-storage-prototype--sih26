@@ -1,0 +1,1731 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #0a0c10; }
+  body { font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: #3b82f6; text-decoration: none; }
+  a:hover { color: #60a5fa; }
+  input, select, textarea, button { font-family: inherit; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: #3b82f6; }
+  input::placeholder, textarea::placeholder { color: #555869; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #2a2d35; border-radius: 6px; }
+  ::-webkit-scrollbar-track { background: #0a0c10; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes slidein { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes rise { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  @keyframes pulseborder { 0%, 100% { border-color: #ef4444; } 50% { border-color: #7f1d1d; } }
+</style>
+</helmet>
+
+<sc-if value="{{ isPublic }}" hint-placeholder-val="{{ true }}">
+  <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 48px 24px; background: #0a0c10; color: #e8eaf0">
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 10px">
+      <div style="color: #3b82f6; display: flex">{{ i36.shield }}</div>
+      <div style="font-size: 24px; font-weight: 700; letter-spacing: 0.18em; color: #e8eaf0">PRAMAAN</div>
+      <div style="font-size: 13px; color: #8b8fa8">Secure Evidence Vault</div>
+    </div>
+
+    <sc-if value="{{ isLoginCreds }}" hint-placeholder-val="{{ true }}">
+      <div style="width: 380px; max-width: 100%; background: #111318; border: 1px solid #2a2d35; border-radius: 8px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="lg-email" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Email</label>
+          <input id="lg-email" type="email" defaultValue="ravi.kumar@mah.police.gov.in" onChange="{{ h.setEmail }}" style="height: 36px; padding: 0 10px; font-size: 14px; color: #e8eaf0; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px" />
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="lg-pw" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Password</label>
+          <input id="lg-pw" type="password" placeholder="••••••••••••" onChange="{{ h.setPassword }}" style="height: 36px; padding: 0 10px; font-size: 14px; color: #e8eaf0; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px" />
+        </div>
+
+        <sc-if value="{{ loginError }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; gap: 8px; align-items: flex-start; background: #3d1010; border: 1px solid #ef4444; border-radius: 6px; padding: 10px 12px">
+            <div style="color: #ef4444; margin-top: 1px; display: flex">{{ i16.alertCircle }}</div>
+            <div style="font-size: 13px; color: #e8eaf0; line-height: 1.45">{{ loginError }}</div>
+          </div>
+        </sc-if>
+
+        <button type="button" onClick="{{ h.signIn }}" style="height: 34px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">Sign In</button>
+
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-top: 1px solid #2a2d35; padding-top: 12px">
+          <span style="font-size: 11px; font-family: 'JetBrains Mono', monospace; color: #555869">PROTOTYPE STATES</span>
+          <button type="button" onClick="{{ h.signIn }}" style="background: none; border: none; padding: 0; font-size: 11px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0">Success</button>
+          <button type="button" onClick="{{ h.badCreds }}" style="background: none; border: none; padding: 0; font-size: 11px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0">Invalid credentials</button>
+          <button type="button" onClick="{{ h.lockout }}" style="background: none; border: none; padding: 0; font-size: 11px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0">Account locked</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isLoginMfa }}" hint-placeholder-val="{{ false }}">
+      <div style="width: 380px; max-width: 100%; background: #111318; border: 1px solid #2a2d35; border-radius: 8px; padding: 24px; display: flex; flex-direction: column; gap: 8px; animation: rise 200ms ease-out">
+        <div style="color: #3b82f6; display: flex">{{ i20.keyRound }}</div>
+        <div style="font-size: 17px; font-weight: 600; color: #e8eaf0; margin-top: 4px">Two-Factor Authentication</div>
+        <div style="font-size: 13px; color: #8b8fa8; line-height: 1.5">Enter the 6-digit code from your authenticator app.</div>
+        <input inputMode="numeric" maxLength="6" placeholder="––––––" value="{{ f.otp }}" onChange="{{ h.setOtp }}" style="margin-top: 12px; height: 52px; text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 24px; letter-spacing: 0.42em; text-indent: 0.42em; color: #e8eaf0; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px" />
+        <div style="font-size: 11px; color: #555869; text-align: center; margin-top: 2px">Code refreshes every 30 seconds</div>
+        <div style="display: flex; gap: 8px; margin-top: 12px">
+          <button type="button" onClick="{{ h.verifyLoginMfa }}" style="flex: 1; height: 34px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">Verify</button>
+          <button type="button" onClick="{{ h.backToCreds }}" style="height: 34px; padding: 0 14px; background: transparent; color: #8b8fa8; border: none; border-radius: 4px; font-size: 14px; cursor: pointer" style-hover="color: #e8eaf0; background: #1a1d24">Back</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isMfaSetup }}" hint-placeholder-val="{{ false }}">
+      <div style="width: 520px; max-width: 100%; background: #111318; border: 1px solid #2a2d35; border-radius: 8px; padding: 24px; display: flex; flex-direction: column; gap: 20px">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div style="color: #3b82f6; display: flex">{{ i20.keyRound }}</div>
+          <div style="font-size: 20px; font-weight: 600; color: #e8eaf0">Set Up Two-Factor Authentication</div>
+          <div style="font-size: 13px; color: #8b8fa8">Required before accessing the system.</div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px">
+          <div style="font-size: 13px; font-weight: 500; color: #e8eaf0">Step 1 — Scan this QR code</div>
+          <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap">
+            <div style="width: 152px; height: 152px; flex: none; border: 1px dashed #3a3d47; border-radius: 6px; background: repeating-linear-gradient(45deg, #14161c 0 6px, #1a1d24 6px 12px); display: flex; align-items: center; justify-content: center; text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #555869; line-height: 1.6; padding: 12px">QR CODE<br />otpauth://</div>
+            <div style="display: flex; flex-direction: column; gap: 8px; min-width: 200px">
+              <div style="font-size: 13px; color: #8b8fa8">Or enter this key manually:</div>
+              <div style="display: flex; align-items: center; gap: 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; padding: 8px 10px">
+                <code style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e8eaf0; letter-spacing: 0.04em">JBSWY3DPEHPK3PXP</code>
+                <button type="button" title="Copy key" aria-label="Copy key" onClick="{{ h.copy }}" style="margin-left: auto; width: 24px; height: 24px; flex: none; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 4px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0; background: #1a1d24">{{ i14.copy }}</button>
+              </div>
+              <div style="font-size: 11px; color: #555869; line-height: 1.6">Issuer PRAMAAN · Algorithm SHA-1 · 6 digits · 30s period</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #2a2d35; padding-top: 20px">
+          <div style="font-size: 13px; font-weight: 500; color: #e8eaf0">Step 2 — Enter the 6-digit code to confirm setup</div>
+          <input inputMode="numeric" maxLength="6" placeholder="––––––" value="{{ f.mfaOtp }}" onChange="{{ h.setMfaOtp }}" style="width: 220px; height: 48px; text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 22px; letter-spacing: 0.4em; text-indent: 0.4em; color: #e8eaf0; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px" />
+          <button type="button" onClick="{{ h.activateMfa }}" style="align-self: flex-start; margin-top: 4px; height: 34px; padding: 0 16px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">Activate MFA</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isShareValid }}" hint-placeholder-val="{{ false }}">
+      <div style="width: 420px; max-width: 100%; background: #111318; border: 1px solid #2a2d35; border-radius: 8px; padding: 24px; display: flex; flex-direction: column; gap: 18px">
+        <div style="display: flex; gap: 12px; align-items: flex-start">
+          <div style="color: #3b82f6; margin-top: 2px; display: flex">{{ i20.fileText }}</div>
+          <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+            <div style="font-size: 15px; font-weight: 600; color: #e8eaf0; word-break: break-all">forensic_wallet_trace_report.pdf</div>
+            <div style="font-size: 12px; color: #8b8fa8">FORENSIC REPORT · 8.7 MB</div>
+            <div style="font-size: 12px; color: #f59e0b; display: flex; align-items: center; gap: 6px; margin-top: 2px">{{ i14.clock }} Expires in 18 hours</div>
+          </div>
+        </div>
+
+        <div style="background: #1a1d24; border: 1px solid #2a2d35; border-radius: 6px; padding: 12px">
+          <div style="font-size: 12px; color: #8b8fa8; margin-bottom: 4px">This link is restricted to</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e8eaf0">prosecutor@court.gov.in</div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="sh-email" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Email <span style="color: #8b8fa8; font-weight: 400">(required)</span></label>
+          <input id="sh-email" type="email" placeholder="Enter your email to continue" onChange="{{ h.setShareEmail }}" style="height: 36px; padding: 0 10px; font-size: 14px; color: #e8eaf0; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px" />
+        </div>
+
+        <button type="button" onClick="{{ h.shareDownload }}" style="height: 34px; display: flex; align-items: center; justify-content: center; gap: 8px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">{{ i16.download }} Download Document</button>
+
+        <sc-if value="{{ shareDone }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; gap: 8px; align-items: center; background: #14391f; border: 1px solid #22c55e; border-radius: 6px; padding: 10px 12px; font-size: 13px; color: #e8eaf0">{{ i16.checkCircle }} Download started. This access has been logged.</div>
+        </sc-if>
+
+        <div style="font-size: 11px; color: #555869; text-align: center; display: flex; align-items: center; justify-content: center; gap: 6px">{{ i14.shield }} Accessed links are logged.</div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isShareDead }}" hint-placeholder-val="{{ false }}">
+      <div style="width: 420px; max-width: 100%; background: #111318; border: 1px solid #2a2d35; border-radius: 8px; padding: 28px 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center">
+        <div style="color: #ef4444; display: flex">{{ i36.shieldX }}</div>
+        <div style="font-size: 17px; font-weight: 600; color: #e8eaf0">This link is no longer valid.</div>
+        <div style="font-size: 13px; color: #8b8fa8; line-height: 1.6; max-width: 300px; text-wrap: pretty">It may have expired, been revoked, or reached its maximum number of uses.</div>
+        <div style="font-size: 13px; color: #8b8fa8; line-height: 1.6">Contact the issuing officer for a new link.</div>
+      </div>
+    </sc-if>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; font-size: 11px; color: #555869">
+      <span style="font-family: 'JetBrains Mono', monospace">PROTOTYPE NAV</span>
+      <sc-for list="{{ publicNav }}" as="p" hint-placeholder-count="4">
+        <button type="button" onClick="{{ p.go }}" style="background: none; border: none; padding: 0; font-size: 11px; color: {{ p.color }}; cursor: pointer" style-hover="color: #e8eaf0">{{ p.label }}</button>
+      </sc-for>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ isApp }}" hint-placeholder-val="{{ false }}">
+  <div style="min-height: 100vh; background: #0a0c10; color: #e8eaf0">
+
+    <div style="position: sticky; top: 0; z-index: 40; height: 56px; background: #111318; border-bottom: 1px solid #2a2d35; display: flex; align-items: stretch; padding: 0 20px; gap: 24px">
+      <div style="display: flex; align-items: center; gap: 8px; color: #3b82f6; flex: none">{{ i18.shield }}<span style="font-size: 15px; font-weight: 600; letter-spacing: 0.14em; color: #e8eaf0">PRAMAAN</span></div>
+
+      <div style="display: flex; align-items: stretch; gap: 2px; min-width: 0; overflow-x: auto">
+        <sc-for list="{{ nav }}" as="n" hint-placeholder-count="4">
+          <button type="button" title="{{ n.label }}" onClick="{{ n.go }}" style="display: flex; align-items: center; gap: 8px; height: 100%; padding: 0 14px; background: {{ n.bg }}; border: none; border-bottom: 2px solid {{ n.bar }}; color: {{ n.color }}; font-size: 14px; white-space: nowrap; cursor: pointer" style-hover="background: #1a1d24; color: #e8eaf0">{{ n.icon }} {{ n.label }}</button>
+        </sc-for>
+      </div>
+
+      <div style="margin-left: auto; align-self: center; flex: none; position: relative">
+        <button type="button" onClick="{{ h.toggleUserMenu }}" style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px 0 10px; background: transparent; border: 1px solid #2a2d35; border-radius: 6px; cursor: pointer" style-hover="background: #1a1d24">
+          <span style="color: #8b8fa8; display: flex">{{ i18.userCircle }}</span>
+          <span style="display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2">
+            <span style="font-size: 13px; color: #e8eaf0">{{ me.name }}</span>
+            <span style="font-size: 10px; color: #8b8fa8; letter-spacing: 0.04em">{{ me.roleLabel }}</span>
+          </span>
+          <span style="color: #555869; display: flex">{{ i14.chevronDown }}</span>
+        </button>
+
+        <sc-if value="{{ userMenu }}" hint-placeholder-val="{{ false }}">
+          <div style="position: absolute; right: 0; top: 44px; width: 268px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 8px; box-shadow: 0 18px 40px rgba(0,0,0,0.55); padding: 6px; animation: fadein 120ms ease-out">
+            <button type="button" onClick="{{ h.goProfile }}" style="width: 100%; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; background: transparent; border: none; border-radius: 4px; color: #e8eaf0; font-size: 13px; text-align: left; cursor: pointer" style-hover="background: #1e2028">{{ i16.userCircle }} Profile</button>
+            <button type="button" onClick="{{ h.logout }}" style="width: 100%; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; background: transparent; border: none; border-radius: 4px; color: #e8eaf0; font-size: 13px; text-align: left; cursor: pointer" style-hover="background: #1e2028">{{ i16.logOut }} Log out</button>
+            <div style="border-top: 1px solid #2a2d35; margin: 6px 0 4px; padding: 8px 10px 4px; font-size: 10px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.06em; color: #555869">PROTOTYPE — PREVIEW AS ROLE</div>
+            <sc-for list="{{ roleOptions }}" as="r" hint-placeholder-count="5">
+              <button type="button" onClick="{{ r.pick }}" style="width: 100%; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; background: {{ r.bg }}; border: none; border-radius: 4px; color: {{ r.color }}; font-size: 12px; text-align: left; cursor: pointer" style-hover="background: #1e2028">{{ r.icon }} {{ r.label }}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: stretch; min-height: calc(100vh - 56px)">
+      <div style="flex: 1; min-width: 0; padding: 24px 28px 40px; background: #0a0c10">
+        <div style="max-width: 1280px; margin: 0 auto">
+
+          <sc-if value="{{ onDashboard }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 20px">
+              <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+                <h1 style="margin: 0; font-size: 30px; font-weight: 700; color: #e8eaf0">Cases</h1>
+                <sc-if value="{{ canCreateCase }}" hint-placeholder-val="{{ true }}">
+                  <button type="button" onClick="{{ h.newCase }}" style="margin-left: auto; height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 8px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">{{ i16.plus }} New Case</button>
+                </sc-if>
+              </div>
+
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+                <div style="display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; min-width: 260px; color: #555869">{{ i16.search }}
+                  <input placeholder="Search cases…" onChange="{{ h.setCaseSearch }}" style="flex: 1; height: 32px; background: transparent; border: none; color: #e8eaf0; font-size: 14px" />
+                </div>
+                <select onChange="{{ h.setStatusFilter }}" aria-label="Status filter" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+                  <option value="All">Status — all</option>
+                  <option value="OPEN">Open</option>
+                  <option value="UNDER_INVESTIGATION">Under investigation</option>
+                  <option value="CLOSED">Closed</option>
+                  <option value="ARCHIVED">Archived</option>
+                </select>
+                <select onChange="{{ h.setPriorityFilter }}" aria-label="Priority filter" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+                  <option value="All">Priority — all</option>
+                  <option value="CRITICAL">Critical</option>
+                  <option value="HIGH">High</option>
+                  <option value="NORMAL">Normal</option>
+                  <option value="LOW">Low</option>
+                </select>
+                <button type="button" onClick="{{ h.toggleMine }}" style="height: 34px; padding: 0 12px; display: flex; align-items: center; gap: 8px; background: {{ mineBg }}; border: 1px solid #2a2d35; border-radius: 6px; color: {{ mineColor }}; font-size: 13px; white-space: nowrap; cursor: pointer">{{ i14.filter }} {{ mineLabel }}</button>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px">
+                <sc-for list="{{ casesView }}" as="c" hint-placeholder-count="6">
+                  <div style="background: #111318; border: 1px solid #2a2d35; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; transition: transform 140ms ease, box-shadow 140ms ease" style-hover="transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0,0,0,0.45)">
+                    <div style="display: flex; align-items: center; gap: 8px; color: #8b8fa8">{{ c.icon }}<span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #8b8fa8">{{ c.number }}</span></div>
+                    <div style="font-size: 15px; font-weight: 500; color: #e8eaf0; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-wrap: pretty">{{ c.title }}</div>
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                      <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 7px; border-radius: 4px; color: {{ c.st.color }}; background: {{ c.st.bg }}">{{ c.st.text }}</span>
+                      <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 7px; border-radius: 4px; color: {{ c.pr.color }}; background: {{ c.pr.bg }}">{{ c.pr.text }}</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #8b8fa8">
+                      <span>{{ c.meta }}</span>
+                      <span style="color: #555869">{{ c.created }}</span>
+                    </div>
+                    <button type="button" onClick="{{ c.open }}" style="align-self: flex-start; margin-top: 2px; display: flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; color: #3b82f6; font-size: 13px; font-weight: 500; cursor: pointer" style-hover="color: #60a5fa">View Case {{ i14.arrowRight }}</button>
+                  </div>
+                </sc-for>
+              </div>
+
+              <sc-if value="{{ noCases }}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 56px 24px; color: #555869">
+                  {{ i36.folderOpen }}
+                  <div style="font-size: 14px; color: #8b8fa8">No cases match these filters.</div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ onCase }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 18px">
+              <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #8b8fa8">
+                <button type="button" onClick="{{ h.backToCases }}" style="background: none; border: none; padding: 0; color: #8b8fa8; font-size: 12px; cursor: pointer" style-hover="color: #e8eaf0">Cases</button>
+                <span style="color: #555869">/</span>
+                <span style="font-family: 'JetBrains Mono', monospace; color: #e8eaf0">{{ caseNumber }}</span>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #e8eaf0; line-height: 1.35; max-width: 780px; text-wrap: pretty">{{ caseTitle }}</h1>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+                  <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 7px; border-radius: 4px; color: {{ caseSt.color }}; background: {{ caseSt.bg }}">{{ caseSt.text }}</span>
+                  <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 7px; border-radius: 4px; color: {{ casePr.color }}; background: {{ casePr.bg }}">{{ casePr.text }}</span>
+                  <span style="font-size: 12px; color: #8b8fa8">{{ caseDocs }} documents · {{ caseMembers }} members · created {{ caseCreated }}</span>
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 4px; border-bottom: 1px solid #2a2d35">
+                <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+                  <button type="button" onClick="{{ t.go }}" style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; background: transparent; border: none; border-bottom: 2px solid {{ t.border }}; color: {{ t.color }}; font-size: 14px; cursor: pointer" style-hover="color: #e8eaf0">{{ t.icon }} {{ t.label }}</button>
+                </sc-for>
+              </div>
+
+              <sc-if value="{{ tabDocuments }}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; flex-direction: column; gap: 14px">
+                  <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+                    <button type="button" onClick="{{ h.toggleUpload }}" style="height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 8px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">{{ i16.upload }} Upload Document</button>
+                    <div style="width: 1px; height: 22px; background: #2a2d35; margin: 0 4px"></div>
+                    <div style="display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; min-width: 220px; color: #555869">{{ i16.search }}
+                      <input placeholder="Search documents…" onChange="{{ h.setDocSearch }}" style="flex: 1; height: 32px; background: transparent; border: none; color: #e8eaf0; font-size: 14px" />
+                    </div>
+                    <select onChange="{{ h.setDocType }}" aria-label="Document type filter" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+                      <option value="All">Type — all</option>
+                      <option value="FIR">FIR</option>
+                      <option value="EVIDENCE_RECORD">Evidence record</option>
+                      <option value="FORENSIC_REPORT">Forensic report</option>
+                      <option value="WITNESS_STATEMENT">Witness statement</option>
+                      <option value="INVESTIGATION_RECORD">Investigation record</option>
+                      <option value="CHARGE_SHEET">Charge sheet</option>
+                      <option value="COURT_FILING">Court filing</option>
+                    </select>
+                  </div>
+
+                  <sc-if value="{{ showUpload }}" hint-placeholder-val="{{ false }}">
+                    <div style="background: #111318; border: 1px solid #2a2d35; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 16px; animation: rise 180ms ease-out">
+                      <div style="border: 1px dashed #3a3d47; border-radius: 8px; padding: 28px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; background: #14161c">
+                        <div style="color: #3b82f6; display: flex">{{ i36.upload }}</div>
+                        <div style="font-size: 14px; color: #e8eaf0">Drag &amp; drop files here, or click to browse</div>
+                        <div style="font-size: 12px; color: #8b8fa8">PDF, DOCX, XLSX, JPG, PNG, TIFF, MP4, WAV</div>
+                        <div style="font-size: 11px; color: #555869">Maximum 500 MB per file</div>
+                      </div>
+
+                      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end">
+                        <div style="display: flex; flex-direction: column; gap: 6px">
+                          <label for="up-type" style="font-size: 12px; color: #8b8fa8">Document type <span style="color: #ef4444">*</span></label>
+                          <select id="up-type" onChange="{{ h.setUploadType }}" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px; min-width: 190px">
+                            <option value="EVIDENCE_RECORD">Evidence record</option>
+                            <option value="FIR">FIR</option>
+                            <option value="FORENSIC_REPORT">Forensic report</option>
+                            <option value="WITNESS_STATEMENT">Witness statement</option>
+                            <option value="CHARGE_SHEET">Charge sheet</option>
+                            <option value="COURT_FILING">Court filing</option>
+                          </select>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 200px">
+                          <label for="up-tags" style="font-size: 12px; color: #8b8fa8">Tags <span style="color: #555869">(optional)</span></label>
+                          <input id="up-tags" placeholder="seizure, devices" style="height: 34px; padding: 0 10px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px" />
+                        </div>
+                        <button type="button" onClick="{{ h.startUpload }}" style="height: 34px; padding: 0 14px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">Upload</button>
+                      </div>
+
+                      <sc-if value="{{ uploading }}" hint-placeholder-val="{{ false }}">
+                        <div style="display: flex; flex-direction: column; gap: 8px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 6px; padding: 12px">
+                          <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #e8eaf0">
+                            <span style="color: #3b82f6; display: flex">{{ i14.fileText }}</span>
+                            <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">seizure_annexure_B.pdf</span>
+                            <span style="margin-left: auto; color: #8b8fa8; font-size: 12px">{{ uploadPctLabel }}</span>
+                            <button type="button" title="Cancel upload" aria-label="Cancel upload" onClick="{{ h.cancelUpload }}" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 4px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0; background: #1e2028">{{ i14.x }}</button>
+                          </div>
+                          <div style="height: 4px; background: #2a2d35; border-radius: 2px; overflow: hidden">
+                            <div style="height: 4px; width: {{ uploadWidth }}; background: #3b82f6; transition: width 160ms linear"></div>
+                          </div>
+                        </div>
+                      </sc-if>
+
+                      <sc-if value="{{ uploadDone }}" hint-placeholder-val="{{ false }}">
+                        <div style="display: flex; align-items: center; gap: 8px; background: #14391f; border: 1px solid #22c55e; border-radius: 6px; padding: 10px 12px; font-size: 13px; color: #e8eaf0">
+                          <span style="color: #22c55e; display: flex">{{ i16.checkCircle }}</span> seizure_annexure_B.pdf uploaded · 3 chunks · SHA-256 recorded
+                        </div>
+                      </sc-if>
+
+                      <div style="display: flex; align-items: center; gap: 10px; background: #3d1010; border: 1px solid #ef4444; border-radius: 6px; padding: 10px 12px">
+                        <span style="color: #ef4444; display: flex">{{ i16.xCircle }}</span>
+                        <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e8eaf0">cctv_bundle_04.mp4</span>
+                          <span style="font-size: 12px; color: #8b8fa8">Upload failed — chunk 3 checksum mismatch</span>
+                        </div>
+                        <button type="button" onClick="{{ h.retryUpload }}" style="margin-left: auto; height: 28px; padding: 0 10px; display: flex; align-items: center; gap: 6px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 4px; color: #e8eaf0; font-size: 12px; cursor: pointer" style-hover="background: #1e2028">{{ i14.refresh }} Retry</button>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <div style="background: #111318; border: 1px solid #2a2d35; border-radius: 8px; overflow: hidden">
+                    <div style="overflow-x: auto">
+                    <table style="width: 100%; min-width: 900px; border-collapse: collapse">
+                      <thead>
+                        <tr style="background: #14161c">
+                          <th style="width: 40px; padding: 10px 0 10px 14px; border-bottom: 1px solid #2a2d35"></th>
+                          <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35">
+                            <button type="button" onClick="{{ h.sortName }}" style="display: flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; color: #8b8fa8; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; cursor: pointer" style-hover="color: #e8eaf0">FILENAME {{ i14.arrowUpDown }}</button>
+                          </th>
+                          <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">TYPE</th>
+                          <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35">
+                            <button type="button" onClick="{{ h.sortSize }}" style="display: flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; color: #8b8fa8; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; cursor: pointer" style-hover="color: #e8eaf0">SIZE {{ i14.arrowUpDown }}</button>
+                          </th>
+                          <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">OCR</th>
+                          <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35">
+                            <button type="button" onClick="{{ h.sortDate }}" style="display: flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; color: #8b8fa8; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; cursor: pointer" style-hover="color: #e8eaf0">UPLOADED {{ i14.arrowUpDown }}</button>
+                          </th>
+                          <th style="text-align: right; padding: 10px 14px 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">ACTIONS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <sc-for list="{{ docsView }}" as="d" hint-placeholder-count="8">
+                          <tr onClick="{{ d.open }}" style="background: {{ d.rowBg }}; cursor: pointer" style-hover="background: #1a1d24">
+                            <td style="padding: 12px 0 12px 14px; border-bottom: 1px solid #1e2028; color: {{ d.iconColor }}">{{ d.icon }}</td>
+                            <td style="padding: 12px; border-bottom: 1px solid #1e2028; max-width: 300px">
+                              <span title="{{ d.filename }}" style="display: block; font-size: 13px; color: #e8eaf0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ d.filename }}</span>
+                            </td>
+                            <td style="padding: 12px; border-bottom: 1px solid #1e2028">
+                              <span style="font-size: 11px; letter-spacing: 0.05em; color: #8b8fa8; text-transform: uppercase">{{ d.typeLabel }}</span>
+                            </td>
+                            <td style="padding: 12px; border-bottom: 1px solid #1e2028; font-size: 13px; color: #8b8fa8; white-space: nowrap">{{ d.size }}</td>
+                            <td style="padding: 12px; border-bottom: 1px solid #1e2028">
+                              <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: {{ d.ocr.color }}; white-space: nowrap">{{ d.ocr.icon }} {{ d.ocr.label }}</span>
+                            </td>
+                            <td style="padding: 12px; border-bottom: 1px solid #1e2028; font-size: 13px; color: #8b8fa8; white-space: nowrap">{{ d.created }}</td>
+                            <td style="padding: 8px 14px 8px 12px; border-bottom: 1px solid #1e2028; position: relative">
+                              <div style="display: flex; gap: 2px; justify-content: flex-end">
+                                <button type="button" title="Download" aria-label="Download" onClick="{{ d.download }}" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 4px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0; background: #1e2028">{{ i16.download }}</button>
+                                <button type="button" title="Sign document" aria-label="Sign document" onClick="{{ d.sign }}" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 4px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0; background: #1e2028">{{ i16.penLine }}</button>
+                                <button type="button" title="Share" aria-label="Share" onClick="{{ d.share }}" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 4px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0; background: #1e2028">{{ i16.share2 }}</button>
+                                <button type="button" title="More actions" aria-label="More actions" onClick="{{ d.more }}" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 4px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0; background: #1e2028">{{ i16.moreVertical }}</button>
+                              </div>
+                            </td>
+                          </tr>
+                        </sc-for>
+                      </tbody>
+                    </table>
+
+                    </div>
+
+                    <sc-if value="{{ noDocs }}" hint-placeholder-val="{{ false }}">
+                      <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 48px 24px; color: #555869">
+                        {{ i36.fileText }}
+                        <div style="font-size: 14px; color: #8b8fa8">No documents match these filters.</div>
+                      </div>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ tabActivity }}" hint-placeholder-val="{{ false }}">
+                <div style="background: #111318; border: 1px solid #2a2d35; border-radius: 8px; padding: 8px 4px">
+                  <sc-for list="{{ activity }}" as="a" hint-placeholder-count="8">
+                    <div style="display: flex; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #1e2028">
+                      <div style="width: 26px; height: 26px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(255,255,255,0.04); color: {{ a.color }}">{{ a.icon }}</div>
+                      <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0">
+                        <div style="font-size: 13px; color: #e8eaf0">{{ a.actor }} <span style="color: #8b8fa8">({{ a.roleLabel }})</span></div>
+                        <div style="font-size: 12px; color: #8b8fa8"><span style="font-family: 'JetBrains Mono', monospace; color: {{ a.color }}">{{ a.event }}</span> · {{ a.target }}</div>
+                        <div style="font-size: 11px; font-family: 'JetBrains Mono', monospace; color: #555869">{{ a.when }}</div>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <div style="display: flex; justify-content: center; padding: 14px">
+                    <button type="button" style="height: 30px; padding: 0 14px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 4px; color: #8b8fa8; font-size: 13px; cursor: pointer" style-hover="color: #e8eaf0">Load more</button>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ tabMembers }}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; flex-direction: column; gap: 12px">
+                  <div style="display: flex">
+                    <button type="button" onClick="{{ h.addMember }}" style="margin-left: auto; height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 8px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 4px; color: #e8eaf0; font-size: 14px; white-space: nowrap; cursor: pointer" style-hover="background: #1e2028">{{ i16.plus }} Add Member</button>
+                  </div>
+                  <div style="background: #111318; border: 1px solid #2a2d35; border-radius: 8px; overflow: hidden">
+                    <div style="overflow-x: auto">
+                    <table style="width: 100%; min-width: 760px; border-collapse: collapse">
+                      <thead>
+                        <tr style="background: #14161c">
+                          <th style="text-align: left; padding: 10px 14px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">NAME</th>
+                          <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">ROLE</th>
+                          <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">DEPARTMENT</th>
+                          <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">ADDED</th>
+                          <th style="text-align: right; padding: 10px 14px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">ACTIONS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <sc-for list="{{ membersView }}" as="m" hint-placeholder-count="6">
+                          <tr style-hover="background: #1a1d24">
+                            <td style="padding: 12px 14px; border-bottom: 1px solid #1e2028; font-size: 13px; color: #e8eaf0">{{ m.name }}</td>
+                            <td style="padding: 12px; border-bottom: 1px solid #1e2028">
+                              <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; letter-spacing: 0.05em; padding: 3px 7px; border-radius: 4px; color: {{ m.rb.color }}; background: {{ m.rb.bg }}">{{ i14.badgeCheck }} {{ m.rb.text }}</span>
+                            </td>
+                            <td style="padding: 12px; border-bottom: 1px solid #1e2028; font-size: 13px; color: #8b8fa8">{{ m.dept }}</td>
+                            <td style="padding: 12px; border-bottom: 1px solid #1e2028; font-size: 13px; color: #8b8fa8">{{ m.added }}</td>
+                            <td style="padding: 8px 14px; border-bottom: 1px solid #1e2028; text-align: right">
+                              <sc-if value="{{ m.canRemove }}" hint-placeholder-val="{{ true }}">
+                                <button type="button" onClick="{{ m.remove }}" style="height: 28px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid #2a2d35; border-radius: 4px; color: #8b8fa8; font-size: 12px; cursor: pointer" style-hover="color: #ef4444; border-color: #ef4444">{{ i14.trash2 }} Remove</button>
+                              </sc-if>
+                            </td>
+                          </tr>
+                        </sc-for>
+                      </tbody>
+                    </table>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ tabOverview }}" hint-placeholder-val="{{ false }}">
+                <div style="background: #111318; border: 1px solid #2a2d35; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 18px; max-width: 720px">
+                  <div style="display: grid; grid-template-columns: 160px 1fr; gap: 14px 20px; align-items: center">
+                    <span style="font-size: 13px; color: #8b8fa8">Case number</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #e8eaf0">{{ caseNumber }}</span>
+                    <span style="font-size: 13px; color: #8b8fa8">Title</span>
+                    <span style="font-size: 13px; color: #e8eaf0">{{ caseTitle }}</span>
+                    <span style="font-size: 13px; color: #8b8fa8">Status</span>
+                    <select value="{{ statusValue }}" onChange="{{ h.setCaseStatus }}" aria-label="Case status" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px; max-width: 260px">
+                      <option value="OPEN">Open</option>
+                      <option value="UNDER_INVESTIGATION">Under investigation</option>
+                      <option value="CLOSED">Closed</option>
+                      <option value="ARCHIVED">Archived</option>
+                    </select>
+                    <span style="font-size: 13px; color: #8b8fa8">Priority</span>
+                    <select value="{{ priorityValue }}" onChange="{{ h.setCasePriority }}" aria-label="Case priority" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px; max-width: 260px">
+                      <option value="LOW">Low</option>
+                      <option value="NORMAL">Normal</option>
+                      <option value="HIGH">High</option>
+                      <option value="CRITICAL">Critical</option>
+                    </select>
+                    <span style="font-size: 13px; color: #8b8fa8; align-self: flex-start; padding-top: 8px">Description</span>
+                    <textarea rows="4" defaultValue="Organised crypto-fraud syndicate operating through three exchange accounts; seizure of six hardware wallets on 24 Aug. Forensic tracing in progress with Forensic Lab." style="padding: 10px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px; line-height: 1.55; resize: vertical"></textarea>
+                    <span style="font-size: 13px; color: #8b8fa8">Created by</span>
+                    <span style="font-size: 13px; color: #e8eaf0">Insp. Ravi Kumar · Cybercrime Unit</span>
+                    <span style="font-size: 13px; color: #8b8fa8">Created at</span>
+                    <span style="font-size: 13px; color: #8b8fa8" title="2026-08-24T09:12:00+05:30">{{ caseCreated }}</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px; border-top: 1px solid #2a2d35; padding-top: 16px">
+                    <button type="button" onClick="{{ h.saveCase }}" style="height: 34px; padding: 0 16px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">Save Changes</button>
+                    <span style="font-size: 12px; color: #22c55e">{{ savedAt }}</span>
+                  </div>
+                </div>
+              </sc-if>
+            </div>
+
+            <sc-if value="{{ hasPanel }}" hint-placeholder-val="{{ false }}">
+              <div style="position: fixed; right: 0; top: 56px; bottom: 0; width: 400px; max-width: 100%; z-index: 45; background: #111318; border-left: 1px solid #2a2d35; box-shadow: -18px 0 40px rgba(0,0,0,0.45); padding: 18px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; animation: slidein 180ms ease-out">
+                <div style="display: flex; align-items: flex-start; gap: 10px">
+                  <div style="color: #3b82f6; margin-top: 2px; display: flex">{{ panel.icon }}</div>
+                  <div style="font-size: 14px; font-weight: 500; color: #e8eaf0; word-break: break-all; line-height: 1.4">{{ panel.filename }}</div>
+                  <button type="button" title="Close panel" aria-label="Close panel" onClick="{{ panel.close }}" style="margin-left: auto; width: 28px; height: 28px; flex: none; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 4px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0; background: #1a1d24">{{ i16.x }}</button>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 84px 1fr; gap: 10px 12px; font-size: 13px">
+                  <span style="color: #8b8fa8">Type</span><span style="color: #e8eaf0">{{ panel.typeLabel }}</span>
+                  <span style="color: #8b8fa8">Size</span><span style="color: #e8eaf0">{{ panel.size }}</span>
+                  <span style="color: #8b8fa8">Chunks</span><span style="color: #e8eaf0">{{ panel.chunks }}</span>
+                  <span style="color: #8b8fa8">Status</span><span style="color: #22c55e">{{ panel.status }}</span>
+                  <span style="color: #8b8fa8">SHA-256</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8b8fa8; word-break: break-all">{{ panel.hash }}</span>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #2a2d35; padding-top: 16px">
+                  <div style="font-size: 11px; letter-spacing: 0.06em; color: #555869; font-family: 'JetBrains Mono', monospace">OCR STATUS</div>
+                  <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: {{ panel.ocr.color }}">{{ panel.ocr.icon }} {{ panel.ocr.label }}</span>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #2a2d35; padding-top: 16px">
+                  <div style="font-size: 11px; letter-spacing: 0.06em; color: #555869; font-family: 'JetBrains Mono', monospace">SIGNATURES</div>
+                  <sc-for list="{{ panel.sigs }}" as="g" hint-placeholder-count="1">
+                    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #e8eaf0">
+                      <span style="color: #22c55e; display: flex">{{ g.icon }}</span>
+                      <span>{{ g.name }}</span>
+                      <span style="font-size: 10px; letter-spacing: 0.05em; padding: 2px 6px; border-radius: 4px; color: {{ g.rb.color }}; background: {{ g.rb.bg }}">{{ g.rb.text }}</span>
+                      <span style="margin-left: auto; font-size: 11px; color: #555869; white-space: nowrap">{{ g.at }}</span>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ panel.noSigs }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size: 13px; color: #555869">Not signed yet.</div>
+                  </sc-if>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #2a2d35; padding-top: 16px">
+                  <div style="font-size: 11px; letter-spacing: 0.06em; color: #555869; font-family: 'JetBrains Mono', monospace">TAGS</div>
+                  <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                    <sc-for list="{{ panel.tags }}" as="t" hint-placeholder-count="2">
+                      <span style="font-size: 11px; padding: 3px 8px; border-radius: 6px; background: #1e2028; border: 1px solid #2a2d35; color: #8b8fa8">{{ t.label }}</span>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 84px 1fr; gap: 10px 12px; font-size: 13px; border-top: 1px solid #2a2d35; padding-top: 16px">
+                  <span style="color: #8b8fa8">Uploaded by</span><span style="color: #e8eaf0">{{ panel.uploadedBy }}</span>
+                  <span style="color: #8b8fa8">Uploaded</span><span style="color: #8b8fa8">{{ panel.created }}</span>
+                </div>
+
+                <div style="display: flex; gap: 8px; margin-top: auto; padding-top: 16px; border-top: 1px solid #2a2d35">
+                  <button type="button" onClick="{{ panel.download }}" style="flex: 1; height: 34px; display: flex; align-items: center; justify-content: center; gap: 6px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">{{ i14.download }} Download</button>
+                  <button type="button" onClick="{{ panel.sign }}" style="height: 34px; padding: 0 12px; display: flex; align-items: center; gap: 6px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 4px; color: #e8eaf0; font-size: 13px; cursor: pointer" style-hover="background: #1e2028">{{ i14.penLine }} Sign</button>
+                  <button type="button" onClick="{{ panel.share }}" style="height: 34px; padding: 0 12px; display: flex; align-items: center; gap: 6px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 4px; color: #e8eaf0; font-size: 13px; cursor: pointer" style-hover="background: #1e2028">{{ i14.share2 }} Share</button>
+                </div>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <sc-if value="{{ onSearch }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 20px">
+              <h1 style="margin: 0; font-size: 30px; font-weight: 700; color: #e8eaf0">Search Documents</h1>
+
+              <div style="display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 8px; color: #555869">
+                {{ i20.search }}
+                <input value="{{ queryValue }}" onChange="{{ h.setQuery }}" placeholder="Search filenames and document text…" style="flex: 1; height: 44px; background: transparent; border: none; color: #e8eaf0; font-size: 17px" />
+                <button type="button" title="Clear search" aria-label="Clear search" onClick="{{ h.clearQuery }}" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 4px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0; background: #1a1d24">{{ i16.x }}</button>
+              </div>
+
+              <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap">
+                <div style="width: 240px; flex: none; background: #111318; border: 1px solid #2a2d35; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 18px">
+                  <div style="display: flex; flex-direction: column; gap: 8px">
+                    <div style="font-size: 11px; letter-spacing: 0.06em; font-family: 'JetBrains Mono', monospace; color: #555869">DOCUMENT TYPE</div>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #8b8fa8"><input type="checkbox" /> FIR</label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #8b8fa8"><input type="checkbox" /> Evidence record</label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #8b8fa8"><input type="checkbox" /> Forensic report</label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #8b8fa8"><input type="checkbox" /> Court filing</label>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #2a2d35; padding-top: 16px">
+                    <div style="font-size: 11px; letter-spacing: 0.06em; font-family: 'JetBrains Mono', monospace; color: #555869">DATE RANGE</div>
+                    <input type="date" aria-label="From date" style="height: 32px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #8b8fa8; font-size: 12px" />
+                    <input type="date" aria-label="To date" style="height: 32px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #8b8fa8; font-size: 12px" />
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #2a2d35; padding-top: 16px">
+                    <div style="font-size: 11px; letter-spacing: 0.06em; font-family: 'JetBrains Mono', monospace; color: #555869">TAGS</div>
+                    <input placeholder="wallet, seizure" style="height: 32px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 12px" />
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #2a2d35; padding-top: 16px">
+                    <div style="font-size: 11px; letter-spacing: 0.06em; font-family: 'JetBrains Mono', monospace; color: #555869">CASE</div>
+                    <select aria-label="Case filter" style="height: 32px; padding: 0 6px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 12px">
+                      <option>All cases</option>
+                      <option>CR-2026-0042</option>
+                      <option>CR-2026-0038</option>
+                      <option>CR-2026-0031</option>
+                    </select>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #2a2d35; padding-top: 16px">
+                    <div style="font-size: 11px; letter-spacing: 0.06em; font-family: 'JetBrains Mono', monospace; color: #555869">OCR STATUS</div>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #8b8fa8"><input type="checkbox" /> Verified</label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #8b8fa8"><input type="checkbox" /> Low confidence</label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #8b8fa8"><input type="checkbox" /> Not applicable</label>
+                  </div>
+                </div>
+
+                <div style="flex: 1; min-width: 340px; display: flex; flex-direction: column; gap: 10px">
+                  <sc-if value="{{ hasResults }}" hint-placeholder-val="{{ true }}">
+                    <div style="display: flex; flex-direction: column; gap: 10px">
+                      <div style="font-size: 12px; color: #8b8fa8">{{ resultCount }} found</div>
+                      <div style="background: #111318; border: 1px solid #2a2d35; border-radius: 8px; overflow: hidden">
+                        <div style="overflow-x: auto">
+                        <table style="width: 100%; min-width: 820px; border-collapse: collapse">
+                          <thead>
+                            <tr style="background: #14161c">
+                              <th style="width: 40px; padding: 10px 0 10px 14px; border-bottom: 1px solid #2a2d35"></th>
+                              <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">FILENAME</th>
+                              <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">CASE</th>
+                              <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">TYPE</th>
+                              <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">DATE</th>
+                              <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">SIZE</th>
+                              <th style="text-align: left; padding: 10px 14px 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">RELEVANCE</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <sc-for list="{{ searchRows }}" as="r" hint-placeholder-count="5">
+                              <tr onClick="{{ r.open }}" style="cursor: pointer" style-hover="background: #1a1d24">
+                                <td style="padding: 12px 0 12px 14px; border-bottom: 1px solid #1e2028; color: #8b8fa8">{{ r.icon }}</td>
+                                <td style="padding: 12px; border-bottom: 1px solid #1e2028; font-size: 13px; color: #e8eaf0; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ r.nameEl }}</td>
+                                <td style="padding: 12px; border-bottom: 1px solid #1e2028">
+                                  <button type="button" onClick="{{ r.goCase }}" style="background: none; border: none; padding: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #3b82f6; cursor: pointer" style-hover="color: #60a5fa">{{ r.caseNumber }}</button>
+                                </td>
+                                <td style="padding: 12px; border-bottom: 1px solid #1e2028; font-size: 11px; letter-spacing: 0.05em; color: #8b8fa8; text-transform: uppercase">{{ r.typeLabel }}</td>
+                                <td style="padding: 12px; border-bottom: 1px solid #1e2028; font-size: 13px; color: #8b8fa8; white-space: nowrap">{{ r.date }}</td>
+                                <td style="padding: 12px; border-bottom: 1px solid #1e2028; font-size: 13px; color: #8b8fa8; white-space: nowrap">{{ r.size }}</td>
+                                <td style="padding: 12px 14px 12px 12px; border-bottom: 1px solid #1e2028; min-width: 110px">
+                                  <div style="height: 4px; background: #1e2028; border-radius: 2px; overflow: hidden">
+                                    <div style="height: 4px; width: {{ r.relWidth }}; background: #3b82f6"></div>
+                                  </div>
+                                </td>
+                              </tr>
+                            </sc-for>
+                          </tbody>
+                        </table>
+                        </div>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ searchEmpty }}" hint-placeholder-val="{{ false }}">
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 64px 24px; color: #555869">
+                      {{ i36.search }}
+                      <div style="font-size: 14px; color: #8b8fa8">No documents match your search.</div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ searchIdle }}" hint-placeholder-val="{{ false }}">
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 64px 24px; color: #555869">
+                      {{ i36.search }}
+                      <div style="font-size: 15px; color: #e8eaf0">Search across all your case documents.</div>
+                      <div style="font-size: 13px; color: #8b8fa8">Filenames and OCR-extracted text are both indexed.</div>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ onAudit }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 18px">
+              <h1 style="margin: 0; font-size: 30px; font-weight: 700; color: #e8eaf0">Audit Log</h1>
+
+              <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center">
+                <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; background: {{ chain.bg }}; border: 1px solid {{ chain.border }}; color: {{ chain.color }}; animation: {{ chain.anim }}">
+                  {{ chain.icon }}<span style="font-size: 13px; font-weight: 500">{{ chain.text }}</span>
+                </div>
+                <span style="font-size: 13px; color: #8b8fa8">4,821 events recorded</span>
+                <div style="margin-left: auto; display: flex; align-items: center; gap: 8px">
+                  <button type="button" onClick="{{ h.verifyChain }}" style="height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 8px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 4px; color: #e8eaf0; font-size: 14px; white-space: nowrap; cursor: pointer" style-hover="background: #1e2028">{{ i16.shieldCheck }} Verify Chain</button>
+                  <button type="button" onClick="{{ h.verifyTampered }}" style="background: none; border: none; padding: 0; font-size: 11px; color: #555869; cursor: pointer" style-hover="color: #8b8fa8">simulate tampered ledger</button>
+                </div>
+              </div>
+
+              <sc-if value="{{ chainBroken }}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; gap: 10px; align-items: flex-start; background: #3d1010; border: 1px solid #ef4444; border-radius: 8px; padding: 14px 16px">
+                  <span style="color: #ef4444; margin-top: 1px; display: flex">{{ i18.alertTriangle }}</span>
+                  <div style="display: flex; flex-direction: column; gap: 4px">
+                    <span style="font-size: 14px; font-weight: 500; color: #e8eaf0">Hash chain broken at event #3042</span>
+                    <span style="font-size: 13px; color: #8b8fa8; line-height: 1.55; max-width: 720px; text-wrap: pretty">Events after #3042 can no longer be proven unmodified. Preserve the database, notify the system administrator, and do not export the log as evidence until the break is investigated.</span>
+                  </div>
+                </div>
+              </sc-if>
+
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+                <select aria-label="Event type filter" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+                  <option>Event type — all</option>
+                  <option>DOCUMENT_DOWNLOADED</option>
+                  <option>DOCUMENT_SHARED</option>
+                  <option>UNAUTHORIZED_ACCESS_ATTEMPT</option>
+                  <option>INTEGRITY_VIOLATION</option>
+                </select>
+                <select aria-label="Actor filter" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+                  <option>Role / actor — all</option>
+                  <option>CASE_OFFICER</option>
+                  <option>INVESTIGATOR</option>
+                  <option>PROSECUTOR</option>
+                </select>
+                <select aria-label="Case filter" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+                  <option>Case — all</option>
+                  <option>CR-2026-0042</option>
+                  <option>CR-2026-0038</option>
+                </select>
+                <input type="date" aria-label="From date" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #8b8fa8; font-size: 13px" />
+                <input type="date" aria-label="To date" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #8b8fa8; font-size: 13px" />
+                <button type="button" style="height: 34px; padding: 0 12px; background: transparent; border: none; color: #8b8fa8; font-size: 13px; cursor: pointer" style-hover="color: #e8eaf0">Clear filters</button>
+              </div>
+
+              <div style="background: #111318; border: 1px solid #2a2d35; border-radius: 8px; overflow: hidden">
+                <div style="overflow-x: auto">
+                <table style="width: 100%; min-width: 1080px; border-collapse: collapse">
+                  <thead>
+                    <tr style="background: #14161c">
+                      <th style="text-align: left; padding: 10px 14px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">#</th>
+                      <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">TIMESTAMP</th>
+                      <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">EVENT</th>
+                      <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">ACTOR</th>
+                      <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">TARGET</th>
+                      <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">IP</th>
+                      <th style="width: 44px; padding: 10px 14px 10px 12px; border-bottom: 1px solid #2a2d35"></th>
+                    </tr>
+                  </thead>
+                  <sc-for list="{{ auditRows }}" as="a" hint-placeholder-count="10">
+                    <tbody>
+                      <tr onClick="{{ a.toggle }}" style="cursor: pointer" style-hover="background: #1a1d24">
+                        <td style="padding: 11px 14px; border-bottom: 1px solid #1e2028; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #555869">{{ a.id }}</td>
+                        <td style="padding: 11px 12px; border-bottom: 1px solid #1e2028; font-size: 12px; color: #8b8fa8; white-space: nowrap">{{ a.when }}</td>
+                        <td style="padding: 11px 12px; border-bottom: 1px solid #1e2028">
+                          <span style="display: flex; align-items: center; gap: 8px">
+                            <span style="width: 7px; height: 7px; flex: none; border-radius: 50%; background: {{ a.dot }}"></span>
+                            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.03em; color: #e8eaf0">{{ a.event }}</span>
+                          </span>
+                        </td>
+                        <td style="padding: 11px 12px; border-bottom: 1px solid #1e2028">
+                          <span style="display: flex; align-items: center; gap: 8px; white-space: nowrap">
+                            <span style="font-size: 13px; color: #e8eaf0">{{ a.actor }}</span>
+                            <span style="font-size: 10px; letter-spacing: 0.05em; padding: 2px 6px; border-radius: 4px; color: {{ a.rb.color }}; background: {{ a.rb.bg }}">{{ a.rb.text }}</span>
+                          </span>
+                        </td>
+                        <td style="padding: 11px 12px; border-bottom: 1px solid #1e2028; font-size: 12px; color: #8b8fa8; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ a.target }}</td>
+                        <td style="padding: 11px 12px; border-bottom: 1px solid #1e2028; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #8b8fa8">{{ a.ip }}</td>
+                        <td style="padding: 11px 14px 11px 12px; border-bottom: 1px solid #1e2028; color: #555869">{{ a.chev }}</td>
+                      </tr>
+                      <sc-if value="{{ a.expanded }}" hint-placeholder-val="{{ false }}">
+                        <tr>
+                          <td colSpan="7" style="padding: 0 14px 14px; border-bottom: 1px solid #1e2028; background: #0d0f14">
+                            <pre style="margin: 0; padding: 12px 14px; background: #0a0c10; border: 1px solid #2a2d35; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; color: #8b8fa8; overflow-x: auto">{{ a.meta }}</pre>
+                          </td>
+                        </tr>
+                      </sc-if>
+                    </tbody>
+                  </sc-for>
+                </table>
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 12px">
+                <span style="font-size: 12px; color: #8b8fa8">Showing 4,808–4,821 of 4,821 events</span>
+                <div style="margin-left: auto; display: flex; gap: 6px">
+                  <button type="button" title="Previous page" aria-label="Previous page" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 4px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0">{{ i16.chevronLeft }}</button>
+                  <button type="button" title="Next page" aria-label="Next page" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 4px; color: #555869; cursor: not-allowed">{{ i16.chevronRight }}</button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ onAdmin }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 18px">
+              <h1 style="margin: 0; font-size: 30px; font-weight: 700; color: #e8eaf0">User Management</h1>
+
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+                <div style="display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; min-width: 240px; color: #555869">{{ i16.search }}
+                  <input placeholder="Search users…" style="flex: 1; height: 32px; background: transparent; border: none; color: #e8eaf0; font-size: 14px" />
+                </div>
+                <select aria-label="Role filter" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+                  <option>Role — all</option>
+                  <option>SUPER_ADMIN</option>
+                  <option>CASE_OFFICER</option>
+                  <option>INVESTIGATOR</option>
+                  <option>PROSECUTOR</option>
+                  <option>AUDITOR</option>
+                </select>
+                <select aria-label="Status filter" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+                  <option>Status — all</option>
+                  <option>ACTIVE</option>
+                  <option>LOCKED</option>
+                  <option>INACTIVE</option>
+                </select>
+                <button type="button" onClick="{{ h.newUser }}" style="margin-left: auto; height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 8px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">{{ i16.plus }} Create User</button>
+              </div>
+
+              <div style="background: #111318; border: 1px solid #2a2d35; border-radius: 8px; overflow: hidden">
+                <div style="overflow-x: auto">
+                <table style="width: 100%; min-width: 1080px; border-collapse: collapse">
+                  <thead>
+                    <tr style="background: #14161c">
+                      <th style="text-align: left; padding: 10px 14px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">NAME</th>
+                      <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">EMAIL</th>
+                      <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">ROLE</th>
+                      <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">DEPARTMENT</th>
+                      <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">STATUS</th>
+                      <th style="text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">LAST LOGIN</th>
+                      <th style="text-align: right; padding: 10px 14px 10px 12px; border-bottom: 1px solid #2a2d35; font-size: 12px; font-weight: 500; color: #8b8fa8; letter-spacing: 0.04em">ACTIONS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <sc-for list="{{ usersView }}" as="u" hint-placeholder-count="9">
+                      <tr style-hover="background: #1a1d24">
+                        <td style="padding: 12px 14px; border-bottom: 1px solid #1e2028; font-size: 13px; color: #e8eaf0; white-space: nowrap">{{ u.name }}</td>
+                        <td style="padding: 12px; border-bottom: 1px solid #1e2028; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #8b8fa8">{{ u.email }}</td>
+                        <td style="padding: 12px; border-bottom: 1px solid #1e2028">
+                          <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; letter-spacing: 0.05em; padding: 3px 7px; border-radius: 4px; white-space: nowrap; color: {{ u.rb.color }}; background: {{ u.rb.bg }}">{{ u.icon }} {{ u.rb.text }}</span>
+                        </td>
+                        <td style="padding: 12px; border-bottom: 1px solid #1e2028; font-size: 13px; color: #8b8fa8; white-space: nowrap">{{ u.dept }}</td>
+                        <td style="padding: 12px; border-bottom: 1px solid #1e2028">
+                          <span style="display: flex; align-items: center; gap: 7px; font-size: 12px; color: #8b8fa8; white-space: nowrap">
+                            <span style="width: 7px; height: 7px; border-radius: 50%; background: {{ u.statusColor }}"></span>{{ u.statusLabel }}
+                          </span>
+                        </td>
+                        <td title="{{ u.exact }}" style="padding: 12px; border-bottom: 1px solid #1e2028; font-size: 13px; color: #8b8fa8; white-space: nowrap">{{ u.last }}</td>
+                        <td style="padding: 8px 14px 8px 12px; border-bottom: 1px solid #1e2028; text-align: right; white-space: nowrap">
+                          <button type="button" onClick="{{ u.editRole }}" style="height: 28px; padding: 0 10px; margin-right: 6px; display: inline-flex; align-items: center; gap: 6px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 4px; color: #e8eaf0; font-size: 12px; cursor: pointer" style-hover="background: #1e2028">{{ i14.badgeCheck }} Edit role</button>
+                          <button type="button" onClick="{{ u.deactivate }}" style="height: 28px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid #2a2d35; border-radius: 4px; color: #8b8fa8; font-size: 12px; cursor: pointer" style-hover="color: #ef4444; border-color: #ef4444">{{ i14.userX }} Deactivate</button>
+                        </td>
+                      </tr>
+                    </sc-for>
+                  </tbody>
+                </table>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ onProfile }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 18px">
+              <h1 style="margin: 0; font-size: 30px; font-weight: 700; color: #e8eaf0">My Profile</h1>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; align-items: start">
+
+                <div style="background: #111318; border: 1px solid #2a2d35; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+                  <div style="display: flex; align-items: center; gap: 12px">
+                    <span style="color: #8b8fa8; display: flex">{{ i36.userCircle }}</span>
+                    <div style="display: flex; flex-direction: column; gap: 4px">
+                      <span style="font-size: 17px; font-weight: 600; color: #e8eaf0">{{ profileName }}</span>
+                      <span style="display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; font-size: 11px; font-weight: 500; letter-spacing: 0.05em; padding: 3px 7px; border-radius: 4px; color: {{ profileRole.color }}; background: {{ profileRole.bg }}">{{ i14.badgeCheck }} {{ profileRole.text }}</span>
+                    </div>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 110px 1fr; gap: 12px; font-size: 13px; border-top: 1px solid #2a2d35; padding-top: 16px">
+                    <span style="color: #8b8fa8">Full name</span>
+                    <input defaultValue="{{ profileName }}" style="height: 32px; padding: 0 10px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px" />
+                    <span style="color: #8b8fa8">Email</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #8b8fa8; align-self: center">{{ profileEmail }}</span>
+                    <span style="color: #8b8fa8">Department</span>
+                    <span style="color: #e8eaf0; align-self: center">Cybercrime Unit</span>
+                    <span style="color: #8b8fa8">Member since</span>
+                    <span style="color: #8b8fa8; align-self: center" title="2025-11-04T10:12:00+05:30">Nov 4, 2025</span>
+                  </div>
+                </div>
+
+                <div style="background: #111318; border: 1px solid #2a2d35; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 18px">
+                  <div style="display: flex; flex-direction: column; gap: 10px">
+                    <span style="font-size: 11px; letter-spacing: 0.06em; font-family: 'JetBrains Mono', monospace; color: #555869">PASSWORD</span>
+                    <button type="button" onClick="{{ h.changePassword }}" style="align-self: flex-start; height: 34px; padding: 0 14px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 4px; color: #e8eaf0; font-size: 13px; cursor: pointer" style-hover="background: #1e2028">Change Password</button>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #2a2d35; padding-top: 16px">
+                    <span style="font-size: 11px; letter-spacing: 0.06em; font-family: 'JetBrains Mono', monospace; color: #555869">TWO-FACTOR AUTHENTICATION</span>
+                    <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #22c55e">{{ i16.keyRound }} Enabled</span>
+                    <button type="button" onClick="{{ h.reconfigureMfa }}" style="align-self: flex-start; height: 34px; padding: 0 14px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 4px; color: #e8eaf0; font-size: 13px; cursor: pointer" style-hover="background: #1e2028">Re-configure MFA</button>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #2a2d35; padding-top: 16px">
+                    <span style="font-size: 11px; letter-spacing: 0.06em; font-family: 'JetBrains Mono', monospace; color: #555869">ACTIVE SESSION</span>
+                    <span style="font-size: 13px; color: #8b8fa8">Token expires in <span style="font-family: 'JetBrains Mono', monospace; color: #e8eaf0">6h 43m</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+
+<sc-if value="{{ hasRowMenu }}" hint-placeholder-val="{{ false }}">
+  <div style="position: fixed; top: {{ rowMenu.top }}; left: {{ rowMenu.left }}; z-index: 80; width: 196px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 8px; box-shadow: 0 18px 40px rgba(0,0,0,0.55); padding: 6px; animation: fadein 120ms ease-out">
+    <button type="button" onClick="{{ rowMenu.viewSigs }}" style="width: 100%; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; background: transparent; border: none; border-radius: 4px; color: #e8eaf0; font-size: 13px; text-align: left; white-space: nowrap; cursor: pointer" style-hover="background: #1e2028">{{ i14.shieldCheck }} View signatures</button>
+    <button type="button" onClick="{{ rowMenu.del }}" style="width: 100%; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; background: transparent; border: none; border-radius: 4px; color: #ef4444; font-size: 13px; text-align: left; white-space: nowrap; cursor: pointer" style-hover="background: #3d1010">{{ i14.trash2 }} Delete document</button>
+  </div>
+</sc-if>
+
+<sc-if value="{{ modalStepUp }}" hint-placeholder-val="{{ false }}">
+  <div style="position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 24px; animation: fadein 120ms ease-out">
+    <div style="width: 400px; max-width: 100%; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 8px; box-shadow: 0 28px 60px rgba(0,0,0,0.6); padding: 22px; display: flex; flex-direction: column; gap: 10px">
+      <div style="color: #f59e0b; display: flex">{{ i20.shieldAlert }}</div>
+      <div style="font-size: 17px; font-weight: 600; color: #e8eaf0; margin-top: 2px">Identity Re-Verification Required</div>
+      <div style="font-size: 13px; color: #8b8fa8; line-height: 1.55">This action requires a fresh authentication code.</div>
+      <div style="font-size: 12px; font-family: 'JetBrains Mono', monospace; color: #555869; background: #14161c; border: 1px solid #2a2d35; border-radius: 6px; padding: 8px 10px; word-break: break-word">{{ modalLabel }}</div>
+      <input inputMode="numeric" maxLength="6" placeholder="––––––" value="{{ f.stepUpOtp }}" onChange="{{ h.setStepUpOtp }}" style="margin-top: 6px; height: 48px; text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 22px; letter-spacing: 0.4em; text-indent: 0.4em; color: #e8eaf0; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px" />
+      <sc-if value="{{ stepUpError }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size: 12px; color: #ef4444">{{ stepUpError }}</div>
+      </sc-if>
+      <div style="display: flex; gap: 8px; margin-top: 8px">
+        <button type="button" onClick="{{ h.verifyStepUp }}" style="flex: 1; height: 34px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">Verify</button>
+        <button type="button" onClick="{{ h.closeModal }}" style="height: 34px; padding: 0 14px; background: transparent; border: 1px solid #2a2d35; border-radius: 4px; color: #8b8fa8; font-size: 14px; cursor: pointer" style-hover="color: #e8eaf0">Cancel</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ modalShare }}" hint-placeholder-val="{{ false }}">
+  <div style="position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 24px; animation: fadein 120ms ease-out">
+    <div style="width: 512px; max-width: 100%; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 8px; box-shadow: 0 28px 60px rgba(0,0,0,0.6); padding: 22px; display: flex; flex-direction: column; gap: 16px">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="color: #3b82f6; display: flex">{{ i18.share2 }}</span>
+        <span style="font-size: 17px; font-weight: 600; color: #e8eaf0">Share document</span>
+        <button type="button" title="Close" aria-label="Close" onClick="{{ h.closeModal }}" style="margin-left: auto; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 4px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0; background: #1e2028">{{ i16.x }}</button>
+      </div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #8b8fa8; word-break: break-all">{{ modalFilename }}</div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="sm-email" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Recipient email</label>
+        <input id="sm-email" type="email" placeholder="prosecutor@court.gov.in" style="height: 34px; padding: 0 10px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px" />
+      </div>
+
+      <div style="display: flex; gap: 12px; flex-wrap: wrap">
+        <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 140px">
+          <label for="sm-exp" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Expires in</label>
+          <select id="sm-exp" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+            <option>24 hours</option><option>1 hour</option><option>6 hours</option><option>12 hours</option><option>48 hours</option>
+          </select>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 140px">
+          <label for="sm-uses" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Maximum uses</label>
+          <select id="sm-uses" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+            <option>3</option><option>1</option><option>5</option><option>10</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="sm-note" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Note <span style="color: #8b8fa8; font-weight: 400">(optional)</span></label>
+        <textarea id="sm-note" rows="2" placeholder="For remand hearing on 29 Aug." style="padding: 8px 10px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px; resize: vertical"></textarea>
+      </div>
+
+      <sc-if value="{{ hasShareUrl }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; align-items: center; gap: 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; padding: 10px">
+            <code style="flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e8eaf0; word-break: break-all">{{ shareUrl }}</code>
+            <button type="button" onClick="{{ h.copyUrl }}" style="height: 28px; padding: 0 10px; display: flex; align-items: center; gap: 6px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 4px; color: #e8eaf0; font-size: 12px; cursor: pointer" style-hover="background: #14161c">{{ i14.copy }} {{ copiedUrl }}</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; background: #3d2c08; border: 1px solid #f59e0b; border-radius: 6px; padding: 9px 11px; font-size: 12px; color: #e8eaf0">
+            <span style="color: #f59e0b; display: flex">{{ i14.alertTriangle }}</span> This URL will not be shown again.
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="display: flex; gap: 8px; border-top: 1px solid #2a2d35; padding-top: 16px">
+        <button type="button" onClick="{{ h.createShareUrl }}" style="height: 34px; padding: 0 16px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">Create Link</button>
+        <button type="button" onClick="{{ h.closeModal }}" style="height: 34px; padding: 0 14px; background: transparent; border: 1px solid #2a2d35; border-radius: 4px; color: #8b8fa8; font-size: 14px; cursor: pointer" style-hover="color: #e8eaf0">Close</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ modalCreateCase }}" hint-placeholder-val="{{ false }}">
+  <div style="position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 24px; animation: fadein 120ms ease-out">
+    <div style="width: 512px; max-width: 100%; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 8px; box-shadow: 0 28px 60px rgba(0,0,0,0.6); padding: 22px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="font-size: 17px; font-weight: 600; color: #e8eaf0">New case</span>
+        <button type="button" title="Close" aria-label="Close" onClick="{{ h.closeModal }}" style="margin-left: auto; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 4px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0; background: #1e2028">{{ i16.x }}</button>
+      </div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap">
+        <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 160px">
+          <label for="nc-num" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Case number</label>
+          <input id="nc-num" placeholder="CR-2026-0043" style="height: 34px; padding: 0 10px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-family: 'JetBrains Mono', monospace; font-size: 13px" />
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 160px">
+          <label for="nc-status" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Status</label>
+          <select id="nc-status" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+            <option>OPEN</option><option>UNDER_INVESTIGATION</option>
+          </select>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="nc-title" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Title</label>
+        <input id="nc-title" placeholder="Short descriptive title" style="height: 34px; padding: 0 10px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px" />
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="nc-desc" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Description</label>
+        <textarea id="nc-desc" rows="3" style="padding: 8px 10px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px; resize: vertical"></textarea>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px; max-width: 200px">
+        <label for="nc-pri" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Priority</label>
+        <select id="nc-pri" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+          <option>NORMAL</option><option>LOW</option><option>HIGH</option><option>CRITICAL</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 8px; border-top: 1px solid #2a2d35; padding-top: 16px">
+        <button type="button" onClick="{{ h.submitCase }}" style="height: 34px; padding: 0 16px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">Create Case</button>
+        <button type="button" onClick="{{ h.closeModal }}" style="height: 34px; padding: 0 14px; background: transparent; border: 1px solid #2a2d35; border-radius: 4px; color: #8b8fa8; font-size: 14px; cursor: pointer" style-hover="color: #e8eaf0">Cancel</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ modalCreateUser }}" hint-placeholder-val="{{ false }}">
+  <div style="position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 24px; animation: fadein 120ms ease-out">
+    <div style="width: 480px; max-width: 100%; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 8px; box-shadow: 0 28px 60px rgba(0,0,0,0.6); padding: 22px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="font-size: 17px; font-weight: 600; color: #e8eaf0">Create user</span>
+        <button type="button" title="Close" aria-label="Close" onClick="{{ h.closeModal }}" style="margin-left: auto; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 4px; color: #8b8fa8; cursor: pointer" style-hover="color: #e8eaf0; background: #1e2028">{{ i16.x }}</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="cu-name" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Full name</label>
+        <input id="cu-name" placeholder="SI A. Kulkarni" style="height: 34px; padding: 0 10px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px" />
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="cu-email" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Email</label>
+        <input id="cu-email" type="email" placeholder="a.kulkarni@mah.police.gov.in" style="height: 34px; padding: 0 10px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px" />
+      </div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap">
+        <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 150px">
+          <label for="cu-role" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Role</label>
+          <select id="cu-role" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+            <option>INVESTIGATOR</option><option>CASE_OFFICER</option><option>PROSECUTOR</option><option>AUDITOR</option><option>SUPER_ADMIN</option>
+          </select>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 150px">
+          <label for="cu-dept" style="font-size: 13px; font-weight: 500; color: #e8eaf0">Department</label>
+          <select id="cu-dept" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+            <option>Cybercrime Unit</option><option>Sessions Court</option><option>Forensic Lab</option>
+          </select>
+        </div>
+      </div>
+
+      <sc-if value="{{ hasTempPassword }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 8px; background: #3d1010; border: 1px solid #ef4444; border-radius: 6px; padding: 12px">
+          <div style="font-size: 12px; color: #e8eaf0">Temporary password — copy it now.</div>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <code style="flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #e8eaf0; background: #14161c; border: 1px solid #2a2d35; border-radius: 4px; padding: 8px 10px">{{ tempPassword }}</code>
+            <button type="button" onClick="{{ h.copyTemp }}" style="height: 32px; padding: 0 10px; display: flex; align-items: center; gap: 6px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 4px; color: #e8eaf0; font-size: 12px; cursor: pointer" style-hover="background: #14161c">{{ i14.copy }} {{ copiedTemp }}</button>
+          </div>
+          <div style="font-size: 11px; color: #8b8fa8">This password will not be shown again.</div>
+        </div>
+      </sc-if>
+
+      <div style="display: flex; gap: 8px; border-top: 1px solid #2a2d35; padding-top: 16px">
+        <button type="button" onClick="{{ h.submitUser }}" style="height: 34px; padding: 0 16px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">Create User</button>
+        <button type="button" onClick="{{ h.closeModal }}" style="height: 34px; padding: 0 14px; background: transparent; border: 1px solid #2a2d35; border-radius: 4px; color: #8b8fa8; font-size: 14px; cursor: pointer" style-hover="color: #e8eaf0">Close</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ modalEditRole }}" hint-placeholder-val="{{ false }}">
+  <div style="position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 24px; animation: fadein 120ms ease-out">
+    <div style="width: 420px; max-width: 100%; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 8px; box-shadow: 0 28px 60px rgba(0,0,0,0.6); padding: 22px; display: flex; flex-direction: column; gap: 14px">
+      <div style="font-size: 17px; font-weight: 600; color: #e8eaf0">Change role — {{ modalName }}</div>
+      <div style="font-size: 13px; color: #8b8fa8">Current role <span style="color: #e8eaf0">{{ modalCurrentRole }}</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="er-role" style="font-size: 13px; font-weight: 500; color: #e8eaf0">New role</label>
+        <select id="er-role" value="{{ newRoleValue }}" onChange="{{ h.setNewRole }}" style="height: 34px; padding: 0 8px; background: #1e2028; border: 1px solid #2a2d35; border-radius: 6px; color: #e8eaf0; font-size: 13px">
+          <option value="INVESTIGATOR">INVESTIGATOR</option>
+          <option value="CASE_OFFICER">CASE_OFFICER</option>
+          <option value="PROSECUTOR">PROSECUTOR</option>
+          <option value="AUDITOR">AUDITOR</option>
+          <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 8px; border-top: 1px solid #2a2d35; padding-top: 16px">
+        <button type="button" onClick="{{ h.submitRole }}" style="height: 34px; padding: 0 16px; background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #2563eb">Save role</button>
+        <button type="button" onClick="{{ h.closeModal }}" style="height: 34px; padding: 0 14px; background: transparent; border: 1px solid #2a2d35; border-radius: 4px; color: #8b8fa8; font-size: 14px; cursor: pointer" style-hover="color: #e8eaf0">Cancel</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ modalConfirm }}" hint-placeholder-val="{{ false }}">
+  <div style="position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 24px; animation: fadein 120ms ease-out">
+    <div style="width: 420px; max-width: 100%; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 8px; box-shadow: 0 28px 60px rgba(0,0,0,0.6); padding: 22px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="color: #ef4444; display: flex">{{ i18.alertTriangle }}</span>
+        <span style="font-size: 17px; font-weight: 600; color: #e8eaf0">{{ modalTitle }}</span>
+      </div>
+      <div style="font-size: 13px; color: #8b8fa8; line-height: 1.6; text-wrap: pretty">{{ modalBody }}</div>
+      <div style="display: flex; gap: 8px; margin-top: 6px">
+        <button type="button" onClick="{{ h.confirm }}" style="height: 34px; padding: 0 16px; background: #ef4444; color: #ffffff; border: none; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #dc2626">{{ modalConfirmLabel }}</button>
+        <button type="button" onClick="{{ h.closeModal }}" style="height: 34px; padding: 0 14px; background: transparent; border: 1px solid #2a2d35; border-radius: 4px; color: #8b8fa8; font-size: 14px; cursor: pointer" style-hover="color: #e8eaf0">Cancel</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+  <div style="position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 95; display: flex; align-items: center; gap: 8px; background: #1a1d24; border: 1px solid #2a2d35; border-radius: 8px; box-shadow: 0 18px 40px rgba(0,0,0,0.5); padding: 10px 14px; font-size: 13px; color: #e8eaf0; animation: rise 160ms ease-out">
+    <span style="color: #22c55e; display: flex">{{ i16.checkCircle }}</span>{{ toastText }}
+  </div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startRole&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;CASE_OFFICER&quot;,&quot;SUPER_ADMIN&quot;,&quot;INVESTIGATOR&quot;,&quot;AUDITOR&quot;,&quot;PROSECUTOR&quot;],&quot;default&quot;:&quot;CASE_OFFICER&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;chainTampered&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;startCollapsed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Prototype&quot;}}">
+const C = {
+  base: "#0a0c10", surf: "#111318", elev: "#1a1d24", inp: "#1e2028",
+  bsub: "#2a2d35", bact: "#3a3d47", tp: "#e8eaf0", ts: "#8b8fa8", tm: "#555869",
+  acc: "#3b82f6", accH: "#2563eb", accS: "#1e3a5f",
+  succ: "#22c55e", succS: "#14391f", warn: "#f59e0b", warnS: "#3d2c08",
+  dang: "#ef4444", dangS: "#3d1010", info: "#6366f1", infoS: "#1e1e4a"
+};
+
+const ROLE_LABEL = {
+  SUPER_ADMIN: "System Admin", CASE_OFFICER: "Case Officer", INVESTIGATOR: "Investigator",
+  PROSECUTOR: "Prosecutor", AUDITOR: "Auditor", VIEWER: "Viewer"
+};
+const ROLE_COLOR = {
+  SUPER_ADMIN: C.acc, CASE_OFFICER: C.info, INVESTIGATOR: C.warn,
+  PROSECUTOR: C.succ, AUDITOR: C.ts, VIEWER: C.tm
+};
+const STATUS_COLOR = { OPEN: C.info, UNDER_INVESTIGATION: C.warn, CLOSED: C.succ, ARCHIVED: C.tm };
+const PRIORITY_COLOR = { LOW: C.tm, NORMAL: C.info, HIGH: C.warn, CRITICAL: C.dang };
+const DOCTYPE_ICON = {
+  FIR: "FileWarning", POLICE_REPORT: "FileText", INVESTIGATION_RECORD: "File",
+  WITNESS_STATEMENT: "FileSignature", CHARGE_SHEET: "FileCheck2", COURT_FILING: "Building2",
+  EVIDENCE_RECORD: "FolderLock", FORENSIC_REPORT: "Microscope", LEGAL_NOTICE: "FileText",
+  JUDGMENT: "FileCheck2", OTHER: "File"
+};
+const SEV = {
+  LOGIN: C.succ, LOGOUT: C.succ, DOCUMENT_UPLOADED: C.succ, CASE_CREATED: C.succ,
+  MFA_VERIFIED: C.succ, MFA_STEP_UP_VERIFIED: C.succ,
+  DOCUMENT_DOWNLOADED: C.warn, DOCUMENT_PREVIEWED: C.warn, SHARE_LINK_ACCESSED: C.warn, CASE_ACCESSED: C.warn,
+  DOCUMENT_DELETED: "#fb923c", ROLE_CHANGED: "#fb923c", ACCOUNT_LOCKED: "#fb923c",
+  DOCUMENT_SHARED: "#fb923c", SHARE_LINK_REVOKED: "#fb923c",
+  UNAUTHORIZED_ACCESS_ATTEMPT: C.dang, INTEGRITY_VIOLATION: C.dang, AUDIT_CHAIN_BROKEN: C.dang,
+  LOGIN_FAILED: C.dang, MFA_STEP_UP_FAILED: C.dang
+};
+const ALIAS = {
+  CheckCircle2: ["CheckCircle2", "CircleCheckBig", "CheckCircle"],
+  XCircle: ["XCircle", "CircleX"],
+  AlertCircle: ["AlertCircle", "CircleAlert"],
+  Loader2: ["Loader2", "LoaderCircle"],
+  MoreVertical: ["MoreVertical", "EllipsisVertical"],
+  UserCircle: ["UserCircle", "CircleUser"],
+  FileCheck2: ["FileCheck2", "FileCheck"],
+  Image: ["Image", "ImageIcon"]
+};
+const ICON_SET = {
+  shield: "Shield", shieldCheck: "ShieldCheck", shieldX: "ShieldX", shieldAlert: "ShieldAlert",
+  keyRound: "KeyRound", layoutDashboard: "LayoutDashboard", folderOpen: "FolderOpen",
+  fileText: "FileText", upload: "Upload", download: "Download", search: "Search",
+  clipboardList: "ClipboardList", users: "Users", userCircle: "UserCircle", settings: "Settings",
+  penLine: "PenLine", share2: "Share2", trash2: "Trash2", alertTriangle: "AlertTriangle",
+  alertCircle: "AlertCircle", info: "Info", checkCircle: "CheckCircle2", xCircle: "XCircle",
+  loader: "Loader2", refresh: "RefreshCw", copy: "Copy", x: "X", moreVertical: "MoreVertical",
+  externalLink: "ExternalLink", film: "Film", file: "File", folderLock: "FolderLock",
+  chevronDown: "ChevronDown", chevronRight: "ChevronRight", arrowUpDown: "ArrowUpDown",
+  filter: "Filter", badgeCheck: "BadgeCheck", logOut: "LogOut", microscope: "Microscope",
+  fileWarning: "FileWarning", fileCheck: "FileCheck2", fileSignature: "FileSignature",
+  building: "Building2", plus: "Plus", arrowRight: "ArrowRight", arrowLeft: "ArrowLeft",
+  clock: "Clock", menu: "Menu", image: "Image", lock: "Lock", eye: "Eye", check: "Check",
+  chevronLeft: "ChevronLeft", tag: "Tag", calendar: "Calendar", pencil: "Pencil", userX: "UserX"
+};
+
+class Component extends DCLogic {
+  state = {
+    route: "login", role: null, sidebarOpen: true,
+    loginStep: "creds", loginError: "", email: "ravi.kumar@mah.police.gov.in", password: "",
+    otp: "", mfaOtp: "", stepUpOtp: "", stepUpError: "",
+    shareState: "valid", shareEmail: "", shareDone: false,
+    userMenu: false, caseTab: "documents", docPanel: null, activeCaseId: "c1", rowMenu: "", toast: "",
+    showUpload: false, uploadPhase: "idle", uploadPct: 0, uploadType: "EVIDENCE_RECORD",
+    modal: null, shareUrl: "", tempPassword: "", copied: "",
+    chain: "idle", expanded: {}, auditPage: 1,
+    caseSearch: "", statusFilter: "All", priorityFilter: "All", mineOnly: false,
+    docSearch: "", docTypeFilter: "All", sortKey: "created", sortDir: "desc",
+    query: "wallet", searchTypes: [], newRole: "INVESTIGATOR",
+    caseStatus: "UNDER_INVESTIGATION", casePriority: "CRITICAL", savedAt: ""
+  };
+
+  cases = [
+    { id: "c1", caseNumber: "CR-2026-0042", title: "Cryptocurrency fraud network — Andheri East syndicate", status: "UNDER_INVESTIGATION", priority: "CRITICAL", documentCount: 24, memberCount: 6, created: "3 days ago", createdAt: "2026-08-24T09:12:00+05:30", mine: true },
+    { id: "c2", caseNumber: "CR-2026-0038", title: "Unauthorised data exfiltration at municipal records office", status: "OPEN", priority: "HIGH", documentCount: 12, memberCount: 4, created: "6 days ago", createdAt: "2026-08-21T16:40:00+05:30", mine: true },
+    { id: "c3", caseNumber: "CR-2026-0031", title: "SIM-swap ring targeting senior citizens, Ward 14", status: "UNDER_INVESTIGATION", priority: "HIGH", documentCount: 31, memberCount: 5, created: "2 weeks ago", createdAt: "2026-08-13T11:05:00+05:30", mine: true },
+    { id: "c4", caseNumber: "CR-2026-0027", title: "Counterfeit tender documents — PWD contract 2025/118", status: "OPEN", priority: "NORMAL", documentCount: 9, memberCount: 3, created: "3 weeks ago", createdAt: "2026-08-06T10:20:00+05:30", mine: false },
+    { id: "c5", caseNumber: "CR-2025-0914", title: "Phishing campaign impersonating district treasury", status: "CLOSED", priority: "NORMAL", documentCount: 18, memberCount: 4, created: "2 months ago", createdAt: "2026-06-18T14:00:00+05:30", mine: true },
+    { id: "c6", caseNumber: "CR-2025-0877", title: "Vehicle theft chain — recovered chassis records", status: "ARCHIVED", priority: "LOW", documentCount: 7, memberCount: 2, created: "5 months ago", createdAt: "2026-03-27T09:45:00+05:30", mine: false }
+  ];
+
+  docs = [
+    { id: "d1", filename: "FIR_CR-2026-0042.pdf", docType: "FIR", size: "2.4 MB", bytes: 2516582, chunks: 3, ocr: "DONE", conf: 0.94, uploadedBy: "Insp. Ravi Kumar", created: "Aug 24, 2026", ts: 1756000000, tags: ["fir", "2026"], hash: "9f2c1ab4e77d5c0b3e18a6d94f2b7c81de53a0f6b8c47219ad3e5f0c6b91d8a42", sigs: 2 },
+    { id: "d2", filename: "seizure_memo_wallet_devices.pdf", docType: "EVIDENCE_RECORD", size: "1.1 MB", bytes: 1153433, chunks: 2, ocr: "DONE", conf: 0.97, uploadedBy: "Insp. Ravi Kumar", created: "Aug 24, 2026", ts: 1755990000, tags: ["seizure", "devices"], hash: "3ba71c9e0d4f58a26cb1e7d038f45a9c26b0e7f13d8c95a740fe2b6c8194d3f57", sigs: 1 },
+    { id: "d3", filename: "forensic_wallet_trace_report.pdf", docType: "FORENSIC_REPORT", size: "8.7 MB", bytes: 9122611, chunks: 9, ocr: "LOW_CONFIDENCE", conf: 0.72, uploadedBy: "Dr. A. Bhattacharya", created: "Aug 25, 2026", ts: 1756100000, tags: ["forensic", "wallet-trace"], hash: "c47e0b91d2a86f35104be7c9d0a5f826b3e91c7d45a08fe6b2c91d47a0e35f8b6", sigs: 1 },
+    { id: "d4", filename: "witness_statement_s_patel.docx", docType: "WITNESS_STATEMENT", size: "340 KB", bytes: 348160, chunks: 1, ocr: "DONE", conf: 0.91, uploadedBy: "SI Meera Joshi", created: "Aug 25, 2026", ts: 1756110000, tags: ["witness"], hash: "8d1f6c0b47a293e5cd07b1f9a2e64c83570db2e9f1a4c86d305be7f2c9a1d40b", sigs: 0 },
+    { id: "d5", filename: "exchange_kyc_records.xlsx", docType: "INVESTIGATION_RECORD", size: "4.2 MB", bytes: 4404019, chunks: 5, ocr: "NOT_APPLICABLE", conf: null, uploadedBy: "SI Meera Joshi", created: "Aug 26, 2026", ts: 1756200000, tags: ["kyc", "exchange"], hash: "1c93e7a05d2b48f6a1c07de935b2f84c6019ae7db3c25f80a4e16b9d7c30f2a58", sigs: 0 },
+    { id: "d6", filename: "cctv_frame_andheri_atm.jpg", docType: "EVIDENCE_RECORD", size: "6.8 MB", bytes: 7130316, chunks: 7, ocr: "FAILED", conf: null, uploadedBy: "HC Sunil Yadav", created: "Aug 26, 2026", ts: 1756210000, tags: ["cctv", "atm"], hash: "5e0a2d9b71c4f836e2a5d0b7c19f4386ad0c25e9b7f13a648d05c2e9b1a7f36d0", sigs: 0 },
+    { id: "d7", filename: "charge_sheet_draft_v3.pdf", docType: "CHARGE_SHEET", size: "3.1 MB", bytes: 3250585, chunks: 4, ocr: "PENDING", conf: null, uploadedBy: "Insp. Ravi Kumar", created: "Aug 27, 2026", ts: 1756300000, tags: ["charge-sheet", "draft"], hash: "b6d10f7c94a2e538071bc6d9f2a5e483c07d1b9e6a34f52d80c7e1b6a93f0d425", sigs: 0 },
+    { id: "d8", filename: "court_filing_remand_application.pdf", docType: "COURT_FILING", size: "780 KB", bytes: 798720, chunks: 1, ocr: "DONE", conf: 0.96, uploadedBy: "Adv. K. Deshmukh", created: "Aug 27, 2026", ts: 1756310000, tags: ["court", "remand"], hash: "7a4c1e08b93d62f5041ae7c2b8d90f36c15e0b7a9d2f4863e07c1b5a9d3f206e8", sigs: 1 }
+  ];
+
+  sigs = [
+    { name: "Insp. Ravi Kumar", role: "CASE_OFFICER", at: "Aug 24, 2026 · 11:04", valid: true },
+    { name: "SI Meera Joshi", role: "INVESTIGATOR", at: "Aug 25, 2026 · 09:38", valid: true }
+  ];
+
+  members = [
+    { name: "Insp. Ravi Kumar", role: "CASE_OFFICER", dept: "Cybercrime Unit", added: "Aug 24, 2026" },
+    { name: "SI Meera Joshi", role: "INVESTIGATOR", dept: "Cybercrime Unit", added: "Aug 24, 2026" },
+    { name: "HC Sunil Yadav", role: "INVESTIGATOR", dept: "Cybercrime Unit", added: "Aug 24, 2026" },
+    { name: "Dr. A. Bhattacharya", role: "INVESTIGATOR", dept: "Forensic Lab", added: "Aug 25, 2026" },
+    { name: "Adv. K. Deshmukh", role: "PROSECUTOR", dept: "Sessions Court", added: "Aug 25, 2026" },
+    { name: "R. Nair", role: "AUDITOR", dept: "Cybercrime Unit", added: "Aug 26, 2026" }
+  ];
+
+  users = [
+    { name: "S. Raghavan", email: "s.raghavan@mah.police.gov.in", role: "SUPER_ADMIN", dept: "Cybercrime Unit", status: "ACTIVE", last: "12 minutes ago", exact: "2026-08-27T09:32:11+05:30" },
+    { name: "Insp. Ravi Kumar", email: "ravi.kumar@mah.police.gov.in", role: "CASE_OFFICER", dept: "Cybercrime Unit", status: "ACTIVE", last: "2 hours ago", exact: "2026-08-27T07:44:02+05:30" },
+    { name: "SI Meera Joshi", email: "meera.joshi@mah.police.gov.in", role: "INVESTIGATOR", dept: "Cybercrime Unit", status: "ACTIVE", last: "5 hours ago", exact: "2026-08-27T04:20:55+05:30" },
+    { name: "HC Sunil Yadav", email: "sunil.yadav@mah.police.gov.in", role: "INVESTIGATOR", dept: "Cybercrime Unit", status: "ACTIVE", last: "yesterday", exact: "2026-08-26T18:02:31+05:30" },
+    { name: "Dr. A. Bhattacharya", email: "a.bhattacharya@forensic.gov.in", role: "INVESTIGATOR", dept: "Forensic Lab", status: "ACTIVE", last: "yesterday", exact: "2026-08-26T15:11:07+05:30" },
+    { name: "Adv. K. Deshmukh", email: "k.deshmukh@court.gov.in", role: "PROSECUTOR", dept: "Sessions Court", status: "ACTIVE", last: "3 days ago", exact: "2026-08-24T10:48:19+05:30" },
+    { name: "J. Thakur", email: "j.thakur@mah.police.gov.in", role: "INVESTIGATOR", dept: "Cybercrime Unit", status: "LOCKED", last: "6 days ago", exact: "2026-08-21T22:15:44+05:30" },
+    { name: "R. Nair", email: "r.nair@audit.gov.in", role: "AUDITOR", dept: "Cybercrime Unit", status: "ACTIVE", last: "4 hours ago", exact: "2026-08-27T05:50:12+05:30" },
+    { name: "P. Iyer", email: "p.iyer@mah.police.gov.in", role: "CASE_OFFICER", dept: "Cybercrime Unit", status: "INACTIVE", last: "2 months ago", exact: "2026-06-30T09:05:00+05:30" }
+  ];
+
+  audit = [
+    { id: 4821, type: "DOCUMENT_DOWNLOADED", actor: "Adv. K. Deshmukh", role: "PROSECUTOR", target: "Document · court_filing_remand_application.pdf", ip: "10.24.6.51", when: "Aug 27, 2026 · 14:32", meta: { document_id: "b7f1…9c02", case_number: "CR-2026-0042", bytes: 798720, share_token_used: false } },
+    { id: 4820, type: "MFA_STEP_UP_VERIFIED", actor: "Insp. Ravi Kumar", role: "CASE_OFFICER", target: "Session", ip: "192.168.1.45", when: "Aug 27, 2026 · 14:31", meta: { action: "DOCUMENT_SHARE", method: "TOTP" } },
+    { id: 4819, type: "DOCUMENT_SHARED", actor: "Insp. Ravi Kumar", role: "CASE_OFFICER", target: "Document · forensic_wallet_trace_report.pdf", ip: "192.168.1.45", when: "Aug 27, 2026 · 14:31", meta: { allowed_email: "prosecutor@court.gov.in", expires_in_hours: 24, max_uses: 3 } },
+    { id: 4818, type: "UNAUTHORIZED_ACCESS_ATTEMPT", actor: "J. Thakur", role: "INVESTIGATOR", target: "Case · CR-2026-0038", ip: "192.168.4.19", when: "Aug 27, 2026 · 13:58", meta: { reason: "NOT_A_CASE_MEMBER", endpoint: "GET /api/v1/cases/8f2c…", denied: true } },
+    { id: 4817, type: "DOCUMENT_UPLOADED", actor: "Insp. Ravi Kumar", role: "CASE_OFFICER", target: "Document · charge_sheet_draft_v3.pdf", ip: "192.168.1.45", when: "Aug 27, 2026 · 11:20", meta: { chunks: 4, bytes: 3250585, doc_type: "CHARGE_SHEET", ocr_queued: true } },
+    { id: 4816, type: "SHARE_LINK_ACCESSED", actor: "System", role: null, target: "ShareLink · 4c81…7d3a", ip: "103.21.58.7", when: "Aug 27, 2026 · 10:07", meta: { email_supplied: "prosecutor@court.gov.in", use_count: 1, max_uses: 3 } },
+    { id: 4815, type: "INTEGRITY_VIOLATION", actor: "System", role: null, target: "Document · cctv_frame_andheri_atm.jpg", ip: null, when: "Aug 27, 2026 · 09:42", meta: { expected_chunks: 7, verified_chunks: 6, failed_chunk_index: 3, quarantined: true } },
+    { id: 4814, type: "LOGIN", actor: "SI Meera Joshi", role: "INVESTIGATOR", target: "Session", ip: "192.168.1.62", when: "Aug 27, 2026 · 09:20", meta: { mfa: true, user_agent: "Chrome/128 Windows" } },
+    { id: 4813, type: "ROLE_CHANGED", actor: "S. Raghavan", role: "SUPER_ADMIN", target: "User · P. Iyer", ip: "10.24.6.2", when: "Aug 26, 2026 · 17:55", meta: { from: "INVESTIGATOR", to: "CASE_OFFICER", step_up_verified: true } },
+    { id: 4812, type: "LOGIN_FAILED", actor: "J. Thakur", role: "INVESTIGATOR", target: "Session", ip: "192.168.4.19", when: "Aug 26, 2026 · 17:02", meta: { attempt: 5, lockout_applied: true, window_minutes: 15 } },
+    { id: 4811, type: "ACCOUNT_LOCKED", actor: "System", role: null, target: "User · J. Thakur", ip: null, when: "Aug 26, 2026 · 17:02", meta: { reason: "MAX_FAILED_ATTEMPTS", unlock_by: "SUPER_ADMIN" } },
+    { id: 4810, type: "CASE_ACCESSED", actor: "Dr. A. Bhattacharya", role: "INVESTIGATOR", target: "Case · CR-2026-0042", ip: "10.88.2.14", when: "Aug 26, 2026 · 16:31", meta: { case_number: "CR-2026-0042", member: true } },
+    { id: 4809, type: "DOCUMENT_DELETED", actor: "Insp. Ravi Kumar", role: "CASE_OFFICER", target: "Document · draft_notes_scan.pdf", ip: "192.168.1.45", when: "Aug 26, 2026 · 15:12", meta: { soft_delete: true, retained_days: 30, step_up_verified: true } },
+    { id: 4808, type: "CASE_CREATED", actor: "Insp. Ravi Kumar", role: "CASE_OFFICER", target: "Case · CR-2026-0042", ip: "192.168.1.45", when: "Aug 24, 2026 · 09:12", meta: { priority: "CRITICAL", status: "UNDER_INVESTIGATION" } }
+  ];
+
+  results = [
+    { id: "d3", filename: "forensic_wallet_trace_report.pdf", caseNumber: "CR-2026-0042", docType: "FORENSIC_REPORT", date: "Aug 25, 2026", size: "8.7 MB", rel: 0.98 },
+    { id: "d2", filename: "seizure_memo_wallet_devices.pdf", caseNumber: "CR-2026-0042", docType: "EVIDENCE_RECORD", date: "Aug 24, 2026", size: "1.1 MB", rel: 0.81 },
+    { id: "r3", filename: "wallet_address_cluster_notes.docx", caseNumber: "CR-2026-0031", docType: "INVESTIGATION_RECORD", date: "Aug 19, 2026", size: "512 KB", rel: 0.64 },
+    { id: "r4", filename: "hardware_wallet_chain_of_custody.pdf", caseNumber: "CR-2026-0031", docType: "EVIDENCE_RECORD", date: "Aug 14, 2026", size: "1.9 MB", rel: 0.47 },
+    { id: "r5", filename: "exchange_wallet_subpoena_response.pdf", caseNumber: "CR-2025-0914", docType: "COURT_FILING", date: "Jun 22, 2026", size: "2.2 MB", rel: 0.29 }
+  ];
+
+  componentDidMount() {
+    if (!window.lucide) {
+      this._poll = setInterval(() => { if (window.lucide) { clearInterval(this._poll); this.forceUpdate(); } }, 120);
+    }
+    this._key = (e) => {
+      if (e.key === "Escape") this.setState({ docPanel: null, modal: null, userMenu: false, rowMenu: "" });
+    };
+    window.addEventListener("keydown", this._key);
+  }
+  componentWillUnmount() {
+    clearInterval(this._poll); clearInterval(this._up);
+    window.removeEventListener("keydown", this._key);
+  }
+
+  resolve(name) {
+    const lib = window.lucide && window.lucide.icons;
+    if (!lib) return null;
+    const tries = ALIAS[name] || [name];
+    for (const t of tries) if (lib[t]) return lib[t];
+    return lib.Circle || null;
+  }
+  ic(name, size, extra) {
+    const node = this.resolve(name);
+    if (!node) return null;
+    const kids = (Array.isArray(node) ? node : []).map((n, i) => {
+      const tag = n[0], attrs = Object.assign({ key: "k" + i }, n[1] || {});
+      return React.createElement(tag, attrs);
+    });
+    return React.createElement("svg", {
+      width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
+      strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true",
+      style: Object.assign({ display: "block", flex: "none" }, extra || {})
+    }, kids);
+  }
+  iconSet(size, extra) {
+    const out = {};
+    for (const k in ICON_SET) out[k] = this.ic(ICON_SET[k], size, extra);
+    return out;
+  }
+
+  get myRole() { return this.state.role || this.props.startRole || "CASE_OFFICER"; }
+
+  canSee(page) {
+    const r = this.myRole;
+    if (page === "audit") return r === "SUPER_ADMIN" || r === "AUDITOR";
+    if (page === "admin") return r === "SUPER_ADMIN";
+    if (page === "dashboard" || page === "search" || page === "case") return r !== "AUDITOR" && r !== "VIEWER";
+    return true;
+  }
+  go(route) {
+    const target = this.canSee(route) ? route : (this.canSee("dashboard") ? "dashboard" : "audit");
+    this.setState({ route: target, userMenu: false, docPanel: null, modal: null, copied: "" });
+  }
+  setRole(role) {
+    this.setState({ role, userMenu: false, docPanel: null, modal: null }, () => {
+      if (!this.canSee(this.state.route)) this.go(this.canSee("dashboard") ? "dashboard" : "audit");
+    });
+  }
+  stepUp(label, run) {
+    this._run = run;
+    this.setState({ modal: { kind: "stepUp", label }, stepUpOtp: "", stepUpError: "" });
+  }
+  verifyStepUp() {
+    if (this.state.stepUpOtp.length < 6) { this.setState({ stepUpError: "Enter the full 6-digit code." }); return; }
+    const run = this._run; this._run = null;
+    this.setState({ modal: null, stepUpOtp: "", stepUpError: "" }, () => { if (run) run(); });
+  }
+  startUpload() {
+    clearInterval(this._up);
+    this.setState({ uploadPhase: "uploading", uploadPct: 8 });
+    this._up = setInterval(() => {
+      this.setState((s) => {
+        const p = s.uploadPct + 9;
+        if (p >= 100) { clearInterval(this._up); return { uploadPct: 100, uploadPhase: "done" }; }
+        return { uploadPct: p };
+      });
+    }, 170);
+  }
+  verifyChain(broken) {
+    this.setState({ chain: "loading" });
+    clearTimeout(this._chain);
+    this._chain = setTimeout(() => this.setState({ chain: broken ? "broken" : "valid" }), 1400);
+  }
+  copyThing(key) {
+    this.setState({ copied: key });
+    clearTimeout(this._cp);
+    this._cp = setTimeout(() => this.setState({ copied: "" }), 1600);
+  }
+  toggleExpanded(id) {
+    this.setState((s) => {
+      const e = Object.assign({}, s.expanded); e[id] = !e[id]; return { expanded: e };
+    });
+  }
+  sortBy(key) {
+    this.setState((s) => ({ sortKey: key, sortDir: s.sortKey === key && s.sortDir === "desc" ? "asc" : "desc" }));
+  }
+  digits(v) { return (v || "").replace(/[^0-9]/g, "").slice(0, 6); }
+
+  badge(text, color, bg) { return { text, color, bg: bg || "transparent" }; }
+
+  openCase(c) {
+    this.setState({ route: "case", activeCaseId: c.id, caseTab: "documents", docPanel: null, caseStatus: c.status, casePriority: c.priority, savedAt: "" });
+  }
+  toast(text) {
+    this.setState({ toast: text });
+    clearTimeout(this._toast);
+    this._toast = setTimeout(() => this.setState({ toast: "" }), 2400);
+  }
+  openShare(d) {
+    this.setState({ modal: { kind: "share", filename: d.filename }, shareUrl: "", shareEmail: "" });
+  }
+  createShare() {
+    this.setState({ shareUrl: "https://pramaan.gov.in/share/4c81f7d3a92b06e5" });
+  }
+  statusBadge(v) {
+    const bg = { OPEN: C.infoS, UNDER_INVESTIGATION: C.warnS, CLOSED: C.succS, ARCHIVED: C.elev }[v];
+    return { text: v.replace(/_/g, " "), color: STATUS_COLOR[v], bg };
+  }
+  priorityBadge(v) {
+    const bg = { LOW: C.elev, NORMAL: C.infoS, HIGH: C.warnS, CRITICAL: C.dangS }[v];
+    return { text: v, color: PRIORITY_COLOR[v], bg };
+  }
+  roleBadge(r) {
+    const c = ROLE_COLOR[r] || C.tm;
+    return { text: r.replace(/_/g, " "), color: c, bg: "rgba(255,255,255,0.04)" };
+  }
+
+  ocrView(d, i16) {
+    if (d.ocr === "NOT_APPLICABLE") return { show: false, label: "—", color: C.tm, icon: null };
+    if (d.ocr === "DONE") return { show: true, label: "Verified (" + Math.round(d.conf * 100) + "%)", color: C.succ, icon: i16.checkCircle };
+    if (d.ocr === "LOW_CONFIDENCE") return { show: true, label: "Low confidence (" + Math.round(d.conf * 100) + "%)", color: C.warn, icon: i16.alertCircle };
+    if (d.ocr === "FAILED") return { show: true, label: "OCR failed", color: C.dang, icon: i16.xCircle };
+    return { show: true, label: "Processing…", color: C.tm, icon: this.ic("Loader2", 14, { animation: "spin 1s linear infinite" }) };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const i14 = this.iconSet(14), i16 = this.iconSet(16), i18 = this.iconSet(18), i20 = this.iconSet(20), i36 = this.iconSet(36);
+    const role = this.myRole;
+    const collapsed = !s.sidebarOpen;
+    const labelDisplay = collapsed ? "none" : "inline";
+
+    const meName = { SUPER_ADMIN: "S. Raghavan", CASE_OFFICER: "Insp. Ravi Kumar", INVESTIGATOR: "SI Meera Joshi", PROSECUTOR: "Adv. K. Deshmukh", AUDITOR: "R. Nair", VIEWER: "External Viewer" }[role];
+
+    const navDefs = [
+      { key: "dashboard", label: "Dashboard", icon: i18.layoutDashboard },
+      { key: "search", label: "Search", icon: i18.search },
+      { key: "audit", label: "Audit Log", icon: i18.clipboardList },
+      { key: "admin", label: "User Admin", icon: i18.users },
+      { key: "profile", label: "Profile", icon: i18.userCircle }
+    ];
+    const nav = navDefs.filter((n) => this.canSee(n.key === "profile" ? "profile" : n.key)).map((n) => {
+      const active = s.route === n.key || (n.key === "dashboard" && s.route === "case");
+      return {
+        label: n.label, icon: n.icon, go: () => this.go(n.key), labelDisplay,
+        bg: active ? "rgba(59,130,246,0.10)" : "transparent", bar: active ? C.acc : "transparent",
+        color: active ? C.acc : C.ts
+      };
+    });
+
+    const roleOptions = Object.keys(ROLE_LABEL).filter((r) => r !== "VIEWER").map((r) => ({
+      label: ROLE_LABEL[r], pick: () => this.setRole(r), icon: i14.badgeCheck,
+      color: r === role ? C.tp : C.ts, bg: r === role ? C.accS : "transparent"
+    }));
+
+    const publicNav = [
+      { label: "Login", route: "login" }, { label: "MFA setup", route: "mfa-setup" },
+      { label: "Share link", route: "share" }, { label: "Expired link", route: "share-dead" },
+      { label: "Signed-in app", route: "dashboard" }
+    ].map((p) => ({
+      label: p.label, color: (p.route === s.route || (p.route === "login" && s.route === "login")) ? C.ts : C.tm,
+      go: () => {
+        if (p.route === "share") this.setState({ route: "share", shareState: "valid", shareDone: false });
+        else if (p.route === "share-dead") this.setState({ route: "share", shareState: "dead" });
+        else if (p.route === "login") this.setState({ route: "login", loginStep: "creds", loginError: "" });
+        else this.go(p.route);
+      }
+    }));
+
+    const h = {
+      setEmail: (e) => this.setState({ email: e.target.value }),
+      setPassword: (e) => this.setState({ password: e.target.value }),
+      setOtp: (e) => {
+        const v = this.digits(e.target.value);
+        this.setState({ otp: v }, () => { if (v.length === 6) setTimeout(() => this.go("dashboard"), 260); });
+      },
+      setMfaOtp: (e) => this.setState({ mfaOtp: this.digits(e.target.value) }),
+      setStepUpOtp: (e) => this.setState({ stepUpOtp: this.digits(e.target.value), stepUpError: "" }),
+      signIn: () => this.setState({ loginStep: "mfa", loginError: "", otp: "" }),
+      badCreds: () => this.setState({ loginError: "Invalid credentials." }),
+      lockout: () => this.setState({ loginError: "This account is locked after 5 failed attempts. Contact your system administrator." }),
+      backToCreds: () => this.setState({ loginStep: "creds", otp: "" }),
+      verifyLoginMfa: () => this.go("dashboard"),
+      activateMfa: () => this.go("dashboard"),
+      logout: () => this.setState({ route: "login", loginStep: "creds", loginError: "", otp: "", userMenu: false }),
+      goProfile: () => this.go("profile"),
+      toggleUserMenu: () => this.setState((st) => ({ userMenu: !st.userMenu })),
+      toggleSidebar: () => this.setState((st) => ({ sidebarOpen: !st.sidebarOpen })),
+      copy: () => this.copyThing("secret"),
+      setShareEmail: (e) => this.setState({ shareEmail: e.target.value }),
+      shareDownload: () => this.setState({ shareDone: true })
+    };
+
+    const canManageCase = role === "SUPER_ADMIN" || role === "CASE_OFFICER";
+    const readOnly = role === "PROSECUTOR";
+
+    // ---- Dashboard
+    const q = s.caseSearch.trim().toLowerCase();
+    const casesView = this.cases.filter((c) => {
+      if (s.statusFilter !== "All" && c.status !== s.statusFilter) return false;
+      if (s.priorityFilter !== "All" && c.priority !== s.priorityFilter) return false;
+      if (s.mineOnly && !c.mine) return false;
+      if (q && (c.title + " " + c.caseNumber).toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    }).map((c) => ({
+      number: c.caseNumber, title: c.title,
+      st: this.statusBadge(c.status), pr: this.priorityBadge(c.priority),
+      meta: c.documentCount + " documents  ·  " + c.memberCount + " members",
+      created: "Created " + c.created, icon: i16.folderOpen,
+      open: () => this.openCase(c)
+    }));
+
+    // ---- Case detail
+    const active = this.cases.filter((c) => c.id === (s.activeCaseId || "c1"))[0] || this.cases[0];
+    const tabs = [
+      { key: "documents", label: "Documents", icon: i16.fileText },
+      { key: "activity", label: "Activity", icon: i16.clipboardList },
+      { key: "members", label: "Members", icon: i16.users },
+      { key: "overview", label: "Overview", icon: i16.info }
+    ].map((t) => ({
+      label: t.label, icon: t.icon, go: () => this.setState({ caseTab: t.key, docPanel: null }),
+      color: s.caseTab === t.key ? C.tp : C.ts,
+      border: s.caseTab === t.key ? C.acc : "transparent"
+    }));
+
+    const dq = s.docSearch.trim().toLowerCase();
+    let docList = this.docs.filter((d) => {
+      if (s.docTypeFilter !== "All" && d.docType !== s.docTypeFilter) return false;
+      if (dq && d.filename.toLowerCase().indexOf(dq) === -1) return false;
+      return true;
+    });
+    const dir = s.sortDir === "asc" ? 1 : -1;
+    docList = docList.slice().sort((a, b) => {
+      if (s.sortKey === "filename") return a.filename.localeCompare(b.filename) * dir;
+      if (s.sortKey === "bytes") return (a.bytes - b.bytes) * dir;
+      return (a.ts - b.ts) * dir;
+    });
+    const docsView = docList.map((d, idx) => ({
+      icon: this.ic(DOCTYPE_ICON[d.docType], 16),
+      iconColor: d.docType === "FIR" ? C.acc : C.ts,
+      filename: d.filename, typeLabel: d.docType.replace(/_/g, " "), size: d.size,
+      created: d.created, ocr: this.ocrView(d, i16),
+      rowBg: s.docPanel === d.id ? C.accS : (idx % 2 === 1 ? "rgba(255,255,255,0.015)" : "transparent"),
+      open: () => this.setState({ docPanel: d.id, rowMenu: "" }),
+      download: (e) => { e.stopPropagation(); this.toast("Download started — " + d.filename); },
+      sign: (e) => { e.stopPropagation(); this.stepUp("Sign document — " + d.filename, () => this.toast("Signed with your Ed25519 key")); },
+      share: (e) => { e.stopPropagation(); this.stepUp("Create share link — " + d.filename, () => this.openShare(d)); },
+      more: (e) => {
+        e.stopPropagation();
+        const r = e.currentTarget.getBoundingClientRect();
+        this.setState((st) => st.rowMenu === d.id
+          ? { rowMenu: "" }
+          : { rowMenu: d.id, menuTop: Math.round(r.bottom + 6) + "px", menuLeft: Math.round(Math.max(12, r.right - 196)) + "px" });
+      }
+    }));
+
+    const menuDoc = this.docs.filter((d) => d.id === s.rowMenu)[0] || null;
+    const rowMenu = menuDoc ? {
+      top: s.menuTop, left: s.menuLeft,
+      viewSigs: () => this.setState({ rowMenu: "", docPanel: menuDoc.id }),
+      del: () => {
+        this.setState({ rowMenu: "", modal: { kind: "confirm", title: "Delete document", body: "\u201c" + menuDoc.filename + "\u201d will be removed from this case. The audit trail keeps a record of the deletion.", confirmLabel: "Delete document" } });
+        this._confirm = () => this.stepUp("Delete document — " + menuDoc.filename, () => this.toast("Document deleted — audit event recorded"));
+      }
+    } : null;
+
+    const panelDoc = this.docs.filter((d) => d.id === s.docPanel)[0] || null;
+    const panel = panelDoc ? {
+      filename: panelDoc.filename, typeLabel: panelDoc.docType.replace(/_/g, " "), size: panelDoc.size,
+      chunks: String(panelDoc.chunks), status: "ACTIVE", ocr: this.ocrView(panelDoc, i16),
+      hash: panelDoc.hash.slice(0, 32) + "…", uploadedBy: panelDoc.uploadedBy, created: panelDoc.created,
+      tags: panelDoc.tags.map((t) => ({ label: t })),
+      icon: this.ic(DOCTYPE_ICON[panelDoc.docType], 18),
+      sigs: (panelDoc.sigs > 0 ? this.sigs.slice(0, panelDoc.sigs) : []).map((g) => ({
+        name: g.name, rb: this.roleBadge(g.role), at: g.at, icon: i14.shieldCheck
+      })),
+      noSigs: panelDoc.sigs === 0,
+      close: () => this.setState({ docPanel: null }),
+      download: () => this.toast("Download started — " + panelDoc.filename),
+      sign: () => this.stepUp("Sign document — " + panelDoc.filename, () => this.toast("Signed with your Ed25519 key")),
+      share: () => this.stepUp("Create share link — " + panelDoc.filename, () => this.openShare(panelDoc))
+    } : null;
+
+    const activity = this.audit.slice(0, 8).map((a) => ({
+      icon: this.ic(a.type.indexOf("UNAUTHORIZED") === 0 || a.type.indexOf("INTEGRITY") === 0 ? "AlertTriangle" : "ClipboardList", 14),
+      color: SEV[a.type] || C.ts,
+      actor: a.actor, roleLabel: a.role ? ROLE_LABEL[a.role] : "System",
+      event: a.type, target: a.target.replace(/^[^·]*· /, ""),
+      when: (a.ip ? a.ip + " · " : "") + a.when
+    }));
+
+    const membersView = this.members.map((m) => ({
+      name: m.name, rb: this.roleBadge(m.role), dept: m.dept, added: m.added,
+      canRemove: canManageCase,
+      remove: () => {
+        this.setState({ modal: { kind: "confirm", title: "Remove member", body: m.name + " will lose access to case " + active.caseNumber + ".", confirmLabel: "Remove member" } });
+        this._confirm = () => this.toast(m.name + " removed from case");
+      }
+    }));
+
+    // ---- Search
+    const sq = s.query.trim();
+    const sqLower = sq.toLowerCase();
+    const searchRows = (sq ? this.results.filter((r) => (r.filename + " " + r.caseNumber).toLowerCase().indexOf(sqLower) !== -1) : []).map((r) => {
+      const idx = r.filename.toLowerCase().indexOf(sqLower);
+      let nameEl;
+      if (sq && idx !== -1) {
+        nameEl = React.createElement("span", null,
+          r.filename.slice(0, idx),
+          React.createElement("mark", { key: "m", style: { background: "rgba(59,130,246,0.2)", color: C.acc, padding: "0 1px", borderRadius: 2 } }, r.filename.slice(idx, idx + sq.length)),
+          r.filename.slice(idx + sq.length));
+      } else nameEl = React.createElement("span", null, r.filename);
+      return {
+        nameEl, caseNumber: r.caseNumber, typeLabel: r.docType.replace(/_/g, " "),
+        date: r.date, size: r.size, relWidth: Math.round(r.rel * 100) + "%",
+        icon: this.ic(DOCTYPE_ICON[r.docType], 16),
+        open: () => { this.setState({ route: "case", caseTab: "documents", docPanel: r.id, activeCaseId: "c1" }); },
+        goCase: (e) => { e.stopPropagation(); this.openCase(this.cases.filter((c) => c.caseNumber === r.caseNumber)[0] || this.cases[0]); }
+      };
+    });
+
+    // ---- Audit
+    const auditRows = this.audit.map((a) => ({
+      id: "#" + a.id, dot: SEV[a.type] || C.ts, event: a.type,
+      actor: a.actor, rb: a.role ? this.roleBadge(a.role) : { text: "SYSTEM", color: C.tm, bg: "rgba(255,255,255,0.04)" },
+      target: a.target, ip: a.ip || "—", when: a.when,
+      expanded: !!s.expanded[a.id], meta: JSON.stringify(a.meta, null, 2),
+      chev: s.expanded[a.id] ? i14.chevronDown : i14.chevronRight,
+      toggle: () => this.toggleExpanded(a.id)
+    }));
+    const chainMap = {
+      idle: { icon: i18.shield, text: "Chain not yet verified", color: C.ts, bg: C.surf, border: C.bsub, anim: "none" },
+      loading: { icon: this.ic("Loader2", 18, { animation: "spin 1s linear infinite" }), text: "Verifying…", color: C.acc, bg: C.surf, border: C.bsub, anim: "none" },
+      valid: { icon: i18.shieldCheck, text: "Chain Valid — 4,821 events", color: C.succ, bg: C.succS, border: C.succ, anim: "none" },
+      broken: { icon: i18.shieldX, text: "Tampering Detected — first break at event #3042", color: C.dang, bg: C.dangS, border: C.dang, anim: "pulseborder 1.6s ease-in-out infinite" }
+    };
+
+    // ---- Admin
+    const usersView = this.users.map((u) => ({
+      name: u.name, email: u.email, rb: this.roleBadge(u.role), dept: u.dept,
+      statusLabel: u.status, statusColor: { ACTIVE: C.succ, LOCKED: C.warn, INACTIVE: C.tm }[u.status],
+      last: u.last, exact: u.exact, icon: i14.badgeCheck,
+      editRole: () => this.stepUp("Change role — " + u.name, () => this.setState({ modal: { kind: "editRole", name: u.name, current: u.role }, newRole: u.role })),
+      deactivate: () => {
+        this.setState({ modal: { kind: "confirm", title: "Deactivate account", body: u.name + " will be signed out of all devices and blocked from signing in.", confirmLabel: "Deactivate" } });
+        this._confirm = () => this.stepUp("Deactivate account — " + u.name, () => this.toast(u.name + " deactivated"));
+      }
+    }));
+
+    const m = s.modal || {};
+    const hh = {
+      newCase: () => this.setState({ modal: { kind: "createCase" } }),
+      newUser: () => this.setState({ modal: { kind: "createUser" }, tempPassword: "" }),
+      closeModal: () => this.setState({ modal: null }),
+      submitCase: () => { this.setState({ modal: null }); this.toast("Case created — CR-2026-0043"); },
+      submitUser: () => this.setState({ tempPassword: "Tq7#vLm2xR9wZa4K" }),
+      copyTemp: () => this.copyThing("temp"),
+      copyUrl: () => this.copyThing("url"),
+      createShareUrl: () => this.createShare(),
+      submitRole: () => { this.setState({ modal: null }); this.toast("Role updated — audit event ROLE_CHANGED recorded"); },
+      setNewRole: (e) => this.setState({ newRole: e.target.value }),
+      confirm: () => { const r = this._confirm; this._confirm = null; this.setState({ modal: null }, () => { if (r) r(); }); },
+      setStepUpOtp: (e) => this.setState({ stepUpOtp: this.digits(e.target.value), stepUpError: "" }),
+      verifyStepUp: () => this.verifyStepUp(),
+      setCaseSearch: (e) => this.setState({ caseSearch: e.target.value }),
+      setStatusFilter: (e) => this.setState({ statusFilter: e.target.value }),
+      setPriorityFilter: (e) => this.setState({ priorityFilter: e.target.value }),
+      toggleMine: () => this.setState((st) => ({ mineOnly: !st.mineOnly })),
+      setDocSearch: (e) => this.setState({ docSearch: e.target.value }),
+      setDocType: (e) => this.setState({ docTypeFilter: e.target.value }),
+      sortName: () => this.sortBy("filename"),
+      sortSize: () => this.sortBy("bytes"),
+      sortDate: () => this.sortBy("created"),
+      toggleUpload: () => this.setState((st) => ({ showUpload: !st.showUpload, uploadPhase: "idle", uploadPct: 0 })),
+      setUploadType: (e) => this.setState({ uploadType: e.target.value }),
+      startUpload: () => this.startUpload(),
+      cancelUpload: () => { clearInterval(this._up); this.setState({ uploadPhase: "idle", uploadPct: 0 }); },
+      retryUpload: () => this.startUpload(),
+      setQuery: (e) => this.setState({ query: e.target.value }),
+      clearQuery: () => this.setState({ query: "" }),
+      verifyChain: () => this.verifyChain(!!this.props.chainTampered),
+      verifyTampered: () => this.verifyChain(true),
+      setCaseStatus: (e) => this.setState({ caseStatus: e.target.value }),
+      setCasePriority: (e) => this.setState({ casePriority: e.target.value }),
+      saveCase: () => { this.setState({ savedAt: "Saved just now" }); this.toast("Case updated"); },
+      changePassword: () => this.toast("Password change flow is not part of this pass"),
+      reconfigureMfa: () => this.setState({ route: "mfa-setup", mfaOtp: "" }),
+      backToCases: () => this.go("dashboard"),
+      addMember: () => this.toast("Member picker is not part of this pass")
+    };
+    Object.assign(h, hh);
+
+    return {
+      onDashboard: s.route === "dashboard", onCase: s.route === "case", onSearch: s.route === "search",
+      onAudit: s.route === "audit", onAdmin: s.route === "admin", onProfile: s.route === "profile",
+      canCreateCase: canManageCase, canManageCase, readOnly,
+      casesView, noCases: casesView.length === 0,
+      caseNumber: active.caseNumber, caseTitle: active.title,
+      caseSt: this.statusBadge(active.status), casePr: this.priorityBadge(active.priority),
+      caseCreated: active.created, caseDocs: String(active.documentCount), caseMembers: String(active.memberCount),
+      tabs, tabDocuments: s.caseTab === "documents", tabActivity: s.caseTab === "activity",
+      tabMembers: s.caseTab === "members", tabOverview: s.caseTab === "overview",
+      docsView, noDocs: docsView.length === 0, panel, hasPanel: !!panel,
+      rowMenu, hasRowMenu: !!rowMenu,
+      showUpload: s.showUpload, uploading: s.uploadPhase === "uploading", uploadDone: s.uploadPhase === "done",
+      uploadPctLabel: s.uploadPct + "%", uploadWidth: s.uploadPct + "%",
+      activity, membersView,
+      searchRows, hasResults: searchRows.length > 0, hasQuery: s.query.trim().length > 0,
+      searchEmpty: sq.length > 0 && searchRows.length === 0, searchIdle: sq.length === 0,
+      queryValue: s.query, resultCount: searchRows.length + " documents",
+      auditRows, chain: chainMap[s.chain], chainBroken: s.chain === "broken",
+      usersView, statusValue: s.caseStatus, priorityValue: s.casePriority, savedAt: s.savedAt,
+      modalStepUp: m.kind === "stepUp", modalShare: m.kind === "share", modalCreateCase: m.kind === "createCase",
+      modalCreateUser: m.kind === "createUser", modalEditRole: m.kind === "editRole", modalConfirm: m.kind === "confirm",
+      modalLabel: m.label || "", modalFilename: m.filename || "", modalTitle: m.title || "",
+      modalBody: m.body || "", modalConfirmLabel: m.confirmLabel || "Confirm",
+      modalName: m.name || "", modalCurrentRole: (m.current || "").replace(/_/g, " "),
+      stepUpError: s.stepUpError, shareUrl: s.shareUrl, hasShareUrl: !!s.shareUrl,
+      tempPassword: s.tempPassword, hasTempPassword: !!s.tempPassword,
+      newRoleValue: s.newRole, toastText: s.toast || "", hasToast: !!s.toast,
+      copiedTemp: s.copied === "temp" ? "Copied" : "Copy", copiedUrl: s.copied === "url" ? "Copied" : "Copy",
+      mineLabel: s.mineOnly ? "My cases only" : "All cases",
+      mineColor: s.mineOnly ? C.acc : C.ts, mineBg: s.mineOnly ? C.accS : C.inp,
+      profileName: meName, profileRole: this.roleBadge(role),
+      profileEmail: { SUPER_ADMIN: "s.raghavan@mah.police.gov.in", CASE_OFFICER: "ravi.kumar@mah.police.gov.in", INVESTIGATOR: "meera.joshi@mah.police.gov.in", PROSECUTOR: "k.deshmukh@court.gov.in", AUDITOR: "r.nair@audit.gov.in", VIEWER: "—" }[role],
+      isPublic: s.route === "login" || s.route === "mfa-setup" || s.route === "share",
+      isApp: s.route !== "login" && s.route !== "mfa-setup" && s.route !== "share",
+      isLoginCreds: s.route === "login" && s.loginStep === "creds",
+      isLoginMfa: s.route === "login" && s.loginStep === "mfa",
+      isMfaSetup: s.route === "mfa-setup",
+      isShareValid: s.route === "share" && s.shareState === "valid",
+      isShareDead: s.route === "share" && s.shareState === "dead",
+      shareDone: s.shareDone,
+      loginError: s.loginError,
+      userMenu: s.userMenu,
+      sidebarWidth: collapsed ? "60px" : "220px",
+      labelDisplay,
+      me: { name: meName, roleLabel: ROLE_LABEL[role] },
+      nav, roleOptions, publicNav, h,
+      f: { otp: s.otp, mfaOtp: s.mfaOtp, stepUpOtp: s.stepUpOtp },
+      i14, i16, i18, i20, i36,
+      pageSlot: null
+    };
+  }
+}
+
+</script>
+</body>
+</html>

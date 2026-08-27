@@ -20,6 +20,55 @@ See `feature_plans/contents.md` for the full index.
 The per-feature plans and `feature_plans/audit_trail_plan.md`'s `AuditEventType` enum are the
 **single source of truth**; the summaries in `docs/` are abbreviated and point back to them.
 
+## Design Files (UI Source of Truth)
+
+All frontend UI must match the approved prototype. Design files live at `design/` (sibling of `codebase/`, not inside it):
+
+| File | Purpose |
+|------|---------|
+| `design/PRAMAAN Prototype.dc.html` | Full clickable prototype — every screen, all states, exact layout, colours, spacing |
+| `design/support.js` | dc-runtime that drives the prototype (do not modify) |
+| `design/github.md` | **Screen → repo file map** — read this first to know which page/component file corresponds to each design screen |
+
+### How agents must use the design files
+
+1. **Before implementing any frontend page or component**, read `design/github.md` to find the matching design screen.
+2. **Read the relevant section of `design/PRAMAAN Prototype.dc.html`** to extract exact colours, font sizes, spacing, component structure, and interactive states for that screen.
+3. **Translate the design into React/TypeScript** — same layout, same tokens, but replace all mock/local state with real `apiFetch()` calls to the Flask backend. Delete prototype-only controls (e.g. "PROTOTYPE STATES" buttons).
+4. **Do not invent UI** not in the design. If a state or element is missing from the prototype, flag it in the spec rather than guessing.
+
+### Design tokens (apply exactly — no deviations)
+| Token | Value |
+|-------|-------|
+| Background | `#0a0c10` |
+| Surface | `#111318` |
+| Border | `#2a2d35` |
+| Input bg | `#1e2028` |
+| Text primary | `#e8eaf0` |
+| Text muted | `#8b8fa8` |
+| Text faint | `#555869` |
+| Accent blue | `#3b82f6` (hover `#2563eb`) |
+| Error red | `#ef4444` |
+| Error bg | `#3d1010` |
+| Body font | Inter (400/500/600/700) |
+| Mono font | JetBrains Mono (400/500) |
+| Icon set | Lucide (`unpkg.com/lucide@0.544.0`) |
+
+### Screen → file map (from `design/github.md`)
+| Design screen | Target repo file(s) |
+|---|---|
+| Login + MFA step | `src/pages/LoginPage.tsx` |
+| MFA setup | `src/pages/MfaSetupPage.tsx` |
+| Dashboard (case list) | `src/pages/DashboardPage.tsx`, `components/CaseCard.tsx` |
+| Case detail (Documents / Activity / Members / Overview tabs) | `src/pages/CaseDetailPage.tsx`, `components/DocumentList.tsx`, `DocumentUploader.tsx`, `DocumentDetailPanel.tsx` |
+| Search | `src/pages/SearchPage.tsx` |
+| Audit log | `src/pages/AuditPage.tsx`, `components/ChainVerifyBadge.tsx`, `AuditTable.tsx` |
+| User admin | `src/pages/UserAdminPage.tsx` |
+| Profile | `src/pages/ProfilePage.tsx` |
+| Share access (public) | `src/pages/ShareAccessPage.tsx` |
+| App shell (top bar + sidebar) | `src/components/AppShell.tsx` |
+| Step-up MFA / Share / Confirm modals | `src/components/StepUpMfaModal.tsx`, `ShareModal.tsx`, `ConfirmModal.tsx` |
+
 ## Product Name
 **PRAMAAN — Secure Evidence Vault**
 
@@ -128,6 +177,10 @@ codebase/
 │   └── API.md
 ├── feature_plans/          # per-feature deep-dives (source of truth)
 └── CLAUDE.md
+design/                      # UI prototype (sibling of codebase/, not inside it)
+├── PRAMAAN Prototype.dc.html  # full clickable prototype — source of truth for all UI
+├── support.js                 # dc-runtime (do not modify)
+└── github.md                  # screen → repo file map
 ```
 
 ## Roles in the System (RBAC)
