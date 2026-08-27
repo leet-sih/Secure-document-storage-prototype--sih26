@@ -1,9 +1,9 @@
 {
-  "name": "secure-dms-frontend",
+  "name": "pramaan-frontend",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "React 18 + Vite SPA for the Secure DMS. Talks to the Flask API at /api/v1.",
+  "description": "PRAMAAN — Secure Evidence Vault. React 18 + Vite SPA. Talks to the Flask API at /api/v1. State: React Context + useReducer. HTTP: native fetch (no Axios).",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -14,9 +14,7 @@
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.0",
-    "zustand": "^4.5.0",
-    "axios": "^1.7.0"
+    "react-router-dom": "^6.26.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",

@@ -2,9 +2,12 @@
 
 ## What Is This Feature?
 
-Document sharing allows a CASE_OFFICER or SUPER_ADMIN to generate a time-limited, single-use link that lets an external party (e.g., a prosecutor who is not a system user, or a court) download a specific document without needing an account.
+Document sharing allows a CASE_OFFICER or SUPER_ADMIN to generate a time-limited link for a
+**named recipient** (e.g., a prosecutor who is not a system user, or a court clerk) to download
+a specific document. The recipient must be identified by email — no anonymous open links.
 
-This is the only mechanism by which documents can be accessed by someone without a full system account. It is tightly controlled, auditable, and always time-bounded.
+This is the only mechanism by which documents can be accessed without a full system account.
+It is recipient-bound, auditable, and time-limited. Creating a share link requires step-up MFA.
 
 ---
 
@@ -60,7 +63,7 @@ CREATE TABLE document_share_links (
     document_id     UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     token_hash      TEXT NOT NULL UNIQUE,       -- SHA256(token), hex
     created_by      UUID NOT NULL REFERENCES users(id),
-    allowed_email   TEXT,                       -- optional: restrict to one email address
+    allowed_email   TEXT NOT NULL,              -- REQUIRED: named recipient (no anonymous links)
     expires_at      TIMESTAMPTZ NOT NULL,
     max_uses        INTEGER NOT NULL DEFAULT 1, -- 1 = single-use; -1 = unlimited within window
     use_count       INTEGER NOT NULL DEFAULT 0,
@@ -85,7 +88,7 @@ CREATE INDEX idx_share_document ON document_share_links (document_id, created_at
 ### POST /api/v1/documents/{id}/share `[SUPER_ADMIN, CASE_OFFICER]`
 
 ```json
-// Request
+// Request — allowed_email is REQUIRED (no anonymous links)
 {
   "expires_in_hours": 24,
   "max_uses": 3,
@@ -105,7 +108,10 @@ CREATE INDEX idx_share_document ON document_share_links (document_id, created_at
 Constraints:
 - `expires_in_hours`: min 1, max 48
 - `max_uses`: min 1, max 10; -1 for unlimited (SUPER_ADMIN only)
-- `allowed_email`: if set, the share page requires the recipient to enter this email before download (email is not verified by sending — it's a simple gate to prevent accidental access)
+- `allowed_email`: **REQUIRED** — no anonymous open links in the prototype. The share page
+  requires the recipient to enter this email before download. This is a named-recipient
+  restriction, not a cryptographic binding — the recipient could forward the URL. The UI
+  must communicate this clearly. An email gate does not stop forwarding.
 
 Server behavior:
 1. Verify user has access to parent case
@@ -236,7 +242,11 @@ The share URL is only shown once — it is not stored anywhere the user can retr
 
 1. **Token entropy** — `secrets.token_urlsafe(32)` gives 256 bits of entropy. Brute-forcing is computationally infeasible even with the 5/hour rate limit.
 2. **Token in URL** — The token appears in the URL, which may be logged by the recipient's browser or server logs. Mitigation: use POST body instead of URL for sensitive scenarios. For the prototype, URL is acceptable.
-3. **Email gate** — The `allowed_email` check is a convenience gate, not a security control. The recipient could share the link with anyone. Emphasize this in UI: "Restricting to an email address does not prevent forwarding."
+3. **Email gate** — `allowed_email` is a named-recipient restriction, not a security control.
+   The recipient could forward the URL to anyone. Emphasize this clearly in the UI:
+   "This link is restricted to {email}. Sharing the URL bypasses this restriction."
+   Claim on the slide: "time-limited, revocable access for a named recipient" — accurate.
+   We do NOT claim cryptographic recipient binding.
 4. **Https only** — Share links must be served over HTTPS. The Nginx config must redirect HTTP to HTTPS.
 5. **No auth bypass** — The share endpoint calls the same `document_service.download()` function as the authenticated endpoint. The only difference is that the Vault key lookup uses a service account, not the user's identity.
 6. **ARCHIVED case documents** — Share links should be blocked for documents in ARCHIVED cases. Existing active links for archived documents: revoke them on case archival.

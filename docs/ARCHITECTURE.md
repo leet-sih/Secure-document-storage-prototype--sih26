@@ -1,105 +1,131 @@
-# System Architecture — Secure DMS (leet / SIH26)
+# System Architecture — PRAMAAN: Secure Evidence Vault (leet / SIH26)
 
-> **This describes the PROTOTYPE.** Only PostgreSQL runs as a service; encrypted chunks and
-> master keys live on the backend's local disk. The "Future / production" section at the bottom
-> shows what returns when we scale up (MinIO, Vault, Redis, Celery, Nginx). The document-level
-> data flows (chunking, integrity, audit chain) are identical either way.
+> **This describes the PROTOTYPE.** The two-server separation (Server A = metadata,
+> Server B = ciphertext) is the key architectural claim from the deck. The "Future / production"
+> section at the bottom shows what replaces the remaining stubs (MinIO, Vault, Redis, Celery,
+> Nginx). The document-level data flows (chunking, integrity, audit chain) are identical
+> across prototype and production.
 
-## High-Level Overview (prototype)
+---
+
+## High-Level Overview (prototype — two-server topology)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                          Client Browser                          │
-│               React 18 + Vite (TypeScript SPA)                   │
-│         Vite dev server proxies /api ──► Flask backend           │
+│        React 18 + Vite (TypeScript SPA)                         │
+│        State: React Context + useReducer                        │
+│        HTTP: native fetch via apiFetch()  (no Axios)            │
+│        Vite dev server proxies /api ──► Flask backend            │
 └──────────────────────────┬──────────────────────────────────────┘
-                           │ HTTP (localhost, dev)
+                           │ HTTP (localhost dev / HTTPS production)
                            ▼
-┌──────────────────────────────────────────┐
-│              Flask Backend                │
-│              (Python 3.12)                │
-│  ┌────────────────┐                       │
-│  │  Auth Layer    │  JWT (8h) + TOTP MFA  │
-│  │  RBAC guards   │                       │
-│  └───────┬────────┘                       │
-│  ┌───────▼────────┐                       │
-│  │  Service Layer │  case · doc · audit   │
-│  └───────┬────────┘                       │
-│  ┌───────▼────────┐                       │
-│  │  Crypto Layer  │  AES-256-GCM · HKDF   │
-│  │                │  Ed25519 · SHA-256    │
-│  └───┬────────┬───┘                       │
-└──────┼────────┼──────────────────────────┘
-       │        │              │
-       ▼        ▼              ▼
-┌────────────┐ ┌───────────────┐ ┌────────────────┐
-│ PostgreSQL │ │ Local disk    │ │ Local file KMS │
-│ (metadata) │ │ ./data/chunks │ │ ./data/keys    │
-│ · users    │ │  {doc_id}/    │ │  {doc_id}.key  │
-│ · cases    │ │   chunk_000n  │ │ (AES-wrapped   │
-│ · documents│ │  (ciphertext) │ │  master keys)  │
-│ · chunks   │ └───────────────┘ └────────────────┘
-│ · audit_log│
-└────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                       Flask Backend (app host)                    │
+│                          (Python 3.12)                            │
+│  ┌─────────────────┐                                              │
+│  │  Auth Layer     │  JWT (8h) + TOTP MFA at login               │
+│  │  RBAC guards    │  + @require_recent_mfa on sensitive actions  │
+│  └────────┬────────┘                                              │
+│  ┌────────▼────────┐                                              │
+│  │  Service Layer  │  case · doc · audit · search · share        │
+│  └────────┬────────┘                                              │
+│  ┌────────▼────────┐                                              │
+│  │  Crypto Layer   │  AES-256-GCM · HKDF · Ed25519 · SHA-256    │
+│  └───┬─────────┬───┘                                              │
+│      │         │         │                                        │
+│      │         │   ┌─────▼──────────────────────────────────┐    │
+│      │         │   │  Local file KMS (./data/keys)          │    │
+│      │         │   │  AES-wrapped with KMS_WRAPPING_KEY     │    │
+│      │         │   │  (separate secret from SECRET_KEY)     │    │
+│      │         │   └────────────────────────────────────────┘    │
+└──────┼─────────┼──────────────────────────────────────────────────┘
+       │         │
+       ▼         ▼
+┌──────────────┐   ┌────────────────────────────────────────┐
+│  SERVER A    │   │  SERVER B                              │
+│  PostgreSQL  │   │  Chunk store (local disk prototype)    │
+│  (metadata)  │   │  Path: ./data/chunks/{opaque_key}      │
+│  · users     │   │  OPAQUE flat namespace — no doc IDs,   │
+│  · cases     │   │  no chunk indexes in filenames.        │
+│  · documents │   │  Ciphertext only. No keys. No DB.      │
+│  · chunks    │   │                                        │
+│  · audit_log │   │  In demo: separate physical machine.   │
+└──────────────┘   │  Access: sftp, key auth, dedicated OS  │
+                   │  user. No password. App only.          │
+                   └────────────────────────────────────────┘
 ```
 
-The three stores stay separated on purpose: the DB has only metadata, the chunk store has only
-ciphertext, and the KMS has only keys — you need all three to reconstruct a document.
+**Why two servers?** Compromising Server A (metadata) alone gives an attacker chunk
+storage keys (opaque random strings) but no ciphertext. Compromising Server B (ciphertext)
+alone gives unreadable blobs — no structure, no keys. Both must be compromised simultaneously
+with the KMS to reconstruct any document.
+
+---
+
+## KMS Boundary Decision
+
+**Prototype choice (option b — honest middle ground):**
+- KMS lives on the app host under a dedicated OS user.
+- Master keys are AES-wrapped with `KMS_WRAPPING_KEY` — a **separate** env var from `SECRET_KEY`.
+  `SECRET_KEY` handles Flask session signing only. Two different jobs, two different secrets.
+- Server B (chunk store) has no key material.
+- Server A (database) has no key material.
+
+**Production (option a):** KMS moves to a third host running HashiCorp Vault. Same
+`core/kms.py` interface — only the backend swaps.
+
+See `docs/SECURITY.md` "Key lifecycle" for generation, rotation, backup, and compromise response.
 
 ---
 
 ## Chunked Document Storage — Deep Dive
 
-This is the core security innovation. Every document is split, encrypted per-chunk, and stored as
-independent objects. The document can only be reconstructed with its master key.
-
-> **Prototype ↔ production term mapping** (the flows below are identical; only the backend changes):
-> "MinIO" → the **local chunk store** (`storage/chunk_store.py`, files under `./data/chunks/`).
-> "Vault" → the **local file KMS** (`core/kms.py`, AES-wrapped keys under `./data/keys/`).
+This is the core security innovation. Every document is split, encrypted per-chunk with an
+opaque storage key, and stored as independent objects. The document can only be reconstructed
+with its master key.
 
 ### Upload Flow
 
 ```
-User uploads file.pdf (10 MB)
+User uploads file.pdf (up to 500 MB)
          │
          ▼
  Stream file in 1 MB chunks
          │
          ├── Chunk 0 (1 MB) ──┐
          ├── Chunk 1 (1 MB)   │
-         ├── ...              │
-         └── Chunk 9 (rest)   │
+         └── Chunk n (rest)   │
                               ▼
                   Generate master_key (32 bytes, random)
-                  Store master_key in Vault as:
-                    secret/docs/{doc_id}/master_key
+                  Store master_key in local file KMS:
+                    KMS_DIR/{doc_id}.key  (AES-wrapped, KMS_WRAPPING_KEY)
                               │
                   For each chunk i:
-                    ┌─────────────────────────────────┐
-                    │ chunk_key = HKDF(               │
-                    │   master_key,                   │
-                    │   salt = doc_id,                │
-                    │   info = f"chunk-{i}",          │
-                    │   length = 32                   │
-                    │ )                               │
-                    │ iv = random_bytes(12)           │
-                    │ ciphertext, auth_tag =          │
-                    │   AES_256_GCM(chunk_key, iv,    │
-                    │   plaintext_chunk)              │
-                    │ chunk_hash = SHA256(ciphertext) │
-                    └──────────────┬──────────────────┘
+                    ┌─────────────────────────────────────┐
+                    │ storage_key = secrets.token_hex(16) │ ← opaque, generated here
+                    │ chunk_key = HKDF(                   │
+                    │   master_key,                       │
+                    │   salt = doc_id,                    │
+                    │   info = f"chunk-{i}",              │
+                    │   length = 32                       │
+                    │ )                                   │
+                    │ iv = random_bytes(12)               │
+                    │ ciphertext = AES_256_GCM(           │
+                    │   chunk_key, iv, plaintext_chunk)   │
+                    │ chunk_hash = SHA256(ciphertext)     │
+                    └──────────────┬──────────────────────┘
                                    │
-                    Upload to MinIO: doc-chunks/{doc_id}/chunk_{i}
-                    (ciphertext already includes the 16-byte GCM auth tag)
+                    chunk_store.put_chunk(storage_key, ciphertext)
+                    → flat file at CHUNK_STORAGE_DIR/{storage_key}
                     Store in DB (document_chunks):
                       - chunk_index: i
-                      - minio_key: doc-chunks/{doc_id}/chunk_{i}
-                      - iv: hex(iv)
-                      - chunk_hash: hex(chunk_hash)   # SHA256 of ciphertext(+tag)
+                      - storage_key: opaque random string
+                      - iv_hex: hex(iv)
+                      - chunk_hash: hex(chunk_hash)
                               │
                   integrity_hash = SHA256(chunk_0_hash || chunk_1_hash || ...)
-                  Store in DB (documents):
-                    - total_chunks, integrity_hash, file_size, mime_type, etc.
+                  Store in DB (documents): integrity_hash, total_chunks, …
                               │
                   Record AuditEvent: DOCUMENT_UPLOADED
 ```
@@ -110,49 +136,48 @@ User uploads file.pdf (10 MB)
 User requests GET /documents/{id}/download
          │
          ▼
-  Verify: user has access to parent case (RBAC check)
+  Verify: user has access to parent case (least-privilege RBAC check)
          │
          ▼
-  Fetch master_key from Vault
+  Fetch master_key from local file KMS
          │
          ▼
-  Fetch all chunk metadata from DB (ordered by chunk_index)
+  Fetch all chunk metadata from DB (ordered by chunk_index — NOT by storage_key)
          │
          ▼
-  running_hash_inputs = []
-
   PASS 1 — VERIFY EVERYTHING BEFORE SENDING ANY BYTE (prototype):
   For each chunk i (in order):
     ┌─────────────────────────────────────────────┐
-    │ Fetch ciphertext from MinIO                 │
+    │ Fetch ciphertext from chunk store by        │
+    │   storage_key (opaque)                      │
     │ Verify: SHA256(ciphertext) == chunk_hash    │ ← storage-tamper check
     │ chunk_key = HKDF(master_key, doc_id, i)    │
     │ plaintext = AES_256_GCM_DECRYPT(            │
-    │   chunk_key, iv, ciphertext)                │ ← GCM tag (in ciphertext) validates
-    │ running_hash_inputs.append(chunk_hash)      │
+    │   chunk_key, iv, ciphertext)                │ ← GCM tag validates
     └──────────────────┬──────────────────────────┘
                        │
   computed_integrity = SHA256(all chunk_hashes concatenated)
-  If computed_integrity != stored integrity_hash  → abort 422 + AuditEvent: INTEGRITY_VIOLATION
-  If any SHA256/GCM check failed                   → abort 422 + AuditEvent: INTEGRITY_VIOLATION
+  If computed_integrity != stored integrity_hash  → 422 + AuditEvent: INTEGRITY_VIOLATION
+  If any SHA256/GCM check failed                   → 422 + AuditEvent: INTEGRITY_VIOLATION
          │
          ▼
   PASS 2 — only now stream the reassembled plaintext to the client.
-  (A tampered document therefore never produces a single downloaded byte.)
+  A tampered document therefore never produces a single downloaded byte.
          │
          ▼
   Record AuditEvent: DOCUMENT_DOWNLOADED
 ```
 
-> Trade-off: pre-verification buffers/decrypts the whole document first (fine for the prototype's
-> file sizes). For very large forensic media, production switches to a two-pass streaming scheme
-> that re-reads from MinIO rather than holding plaintext in RAM. See chunked_document_storage_plan.md.
+> Trade-off: pre-verification buffers/decrypts the whole document in RAM. At 500 MB this
+> requires ~500 MB headroom on the app server. Confirmed acceptable for the prototype demo
+> (see bench.py benchmarks). Production switches to two-pass streaming to avoid the RAM spike.
 
 ---
 
-## Audit Trail — Hash Chain
+## Audit Trail — Hash Chain (tamper-evident)
 
-Modelled after blockchain-lite: each audit event includes the hash of the previous event, making the chain tamper-evident without requiring an external blockchain.
+Each audit event includes the hash of the previous event, making the chain tamper-evident:
+if anyone modifies, deletes, or inserts a record, every subsequent hash breaks.
 
 ```
 Event 1 (Genesis)
@@ -162,65 +187,68 @@ Event 1 (Genesis)
 
 Event 2
   prev_hash: Event1.this_hash
-  payload: {type: "USER_CREATED", actor: "admin", ...}
   this_hash: SHA256(Event1.this_hash + payload_json)
-
-Event 3
-  prev_hash: Event2.this_hash
-  ...
+...
 ```
 
-Tampering with any event changes its hash, breaking all subsequent hashes. The `/audit/verify` endpoint recomputes the entire chain and reports any breaks.
+`/audit/verify` recomputes the entire chain and returns `first_break_at` — the ID of the
+first event where the chain fails. A null `first_break_at` means the chain is intact.
+The verification itself is recorded as an audit event.
+
+**Claim:** tamper-evident hash chain — *detection*, not immutability. A sufficiently
+privileged attacker who can rewrite all subsequent hashes after a target row would pass
+verification. The DB-level `REVOKE UPDATE, DELETE ON audit_events FROM dms_app_user` closes
+the easy path; a full chain rewrite requires `postgres` superuser, which should be OS-monitored.
+
+---
+
+## Step-Up MFA
+
+Sensitive actions require a TOTP re-check if the session's last MFA verification is older
+than `MFA_STEP_UP_MINUTES` (default 15). The JWT carries an `mfa_at` (epoch) claim.
+
+```
+@require_recent_mfa(minutes=15)  ← wraps the route handler
+  If now - mfa_at > 900s:
+    return 401 { "code": "MFA_REQUIRED" }
+    (frontend prompts for fresh TOTP code, not a full re-login)
+
+POST /auth/mfa/step-up
+  Body: { "totp_code": "123456" }
+  Response: { "access_token": "<re-stamped JWT with fresh mfa_at>" }
+```
+
+Sensitive action set: sign a document, create a share link, delete a document,
+create/deactivate a user, change a role.
 
 ---
 
 ## RBAC Matrix
 
-| Endpoint                    | SUPER_ADMIN | CASE_OFFICER | INVESTIGATOR | PROSECUTOR | AUDITOR | VIEWER |
-|-----------------------------|:-----------:|:------------:|:------------:|:----------:|:-------:|:------:|
-| POST /users                 | ✓           |              |              |            |         |        |
-| POST /cases                 | ✓           | ✓            |              |            |         |        |
-| GET /cases (own)            | ✓           | ✓            | ✓            | ✓          |         |        |
-| POST /cases/{id}/documents  | ✓           | ✓            |              |            |         |        |
-| GET /documents/{id}/download| ✓           | ✓            | ✓            | ✓          |         | ✓(link)|
-| DELETE /documents/{id}      | ✓           | ✓            |              |            |         |        |
-| POST /documents/{id}/sign   | ✓           | ✓            | ✓            |            |         |        |
-| GET /audit                  | ✓           |              |              |            | ✓       |        |
-| GET /audit/verify           | ✓           |              |              |            | ✓       |        |
+| Endpoint                         | SUPER_ADMIN | CASE_OFFICER | INVESTIGATOR | PROSECUTOR | AUDITOR | VIEWER |
+|----------------------------------|:-----------:|:------------:|:------------:|:----------:|:-------:|:------:|
+| POST /users                      | ✓ (step-up) |              |              |            |         |        |
+| PATCH /users/{id}/role           | ✓ (step-up) |              |              |            |         |        |
+| POST /cases                      | ✓           | ✓            |              |            |         |        |
+| GET /cases (own)                 | ✓           | ✓            | ✓            | ✓          |         |        |
+| POST /cases/{id}/documents       | ✓           | ✓            |              |            |         |        |
+| GET /documents/{id}/download     | ✓           | ✓            | ✓            | ✓          |         | ✓(link)|
+| DELETE /documents/{id}           | ✓ (step-up) | ✓ (step-up)  |              |            |         |        |
+| POST /documents/{id}/sign        | ✓ (step-up) | ✓ (step-up)  | ✓ (step-up)  |            |         |        |
+| POST /documents/{id}/share       | ✓ (step-up) | ✓ (step-up)  |              |            |         |        |
+| GET /audit                       | ✓           |              |              |            | ✓       |        |
+| GET /audit/verify                | ✓           |              |              |            | ✓       |        |
+
+*(step-up) = `@require_recent_mfa(minutes=15)` applied*
 
 ---
 
 ## Database Schema (Key Tables)
 
-> Abbreviated for overview. The **authoritative** column-by-column schema for each table
-> (with constraints, indexes, and status enums) lives in the matching `feature_plans/*_plan.md`.
+> Abbreviated for overview. Authoritative column-by-column schema (constraints, indexes,
+> status enums) lives in the matching `feature_plans/*_plan.md`.
 
 ```sql
--- Users
-CREATE TABLE users (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email       TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  department_id UUID REFERENCES departments(id),
-  role        TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN','CASE_OFFICER','INVESTIGATOR','PROSECUTOR','AUDITOR','VIEWER')),
-  totp_secret TEXT,                    -- encrypted at app level
-  is_active   BOOLEAN DEFAULT TRUE,
-  failed_logins INT DEFAULT 0,
-  locked_until TIMESTAMPTZ,
-  created_at  TIMESTAMPTZ DEFAULT now()
-);
-
--- Cases
-CREATE TABLE cases (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  case_number TEXT UNIQUE NOT NULL,
-  title       TEXT NOT NULL,
-  description TEXT,
-  status      TEXT DEFAULT 'OPEN',
-  created_by  UUID REFERENCES users(id),
-  created_at  TIMESTAMPTZ DEFAULT now()
-);
-
 -- Documents (metadata only — no content)
 CREATE TABLE documents (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -229,29 +257,33 @@ CREATE TABLE documents (
   mime_type       TEXT NOT NULL,
   file_size_bytes BIGINT NOT NULL,
   total_chunks    INT NOT NULL,
-  integrity_hash  TEXT NOT NULL,       -- SHA256 of all chunk hashes
-  doc_type        TEXT,                -- FIR, charge_sheet, forensic_report, etc.
+  integrity_hash  TEXT NOT NULL,
+  doc_type        TEXT,
+  ocr_status      TEXT DEFAULT 'NOT_APPLICABLE',
+  ocr_confidence  FLOAT,
+  ocr_language    TEXT DEFAULT 'eng+hin',
+  ocr_page_count  INT,
+  search_text     TEXT,
+  search_vector   TSVECTOR,
   uploaded_by     UUID REFERENCES users(id),
   is_deleted      BOOLEAN DEFAULT FALSE,
   created_at      TIMESTAMPTZ DEFAULT now()
 );
 
--- Chunks (references only — ciphertext is in MinIO)
+-- Chunks (opaque storage keys — ciphertext is in the chunk store, not here)
 CREATE TABLE document_chunks (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   document_id UUID REFERENCES documents(id),
   chunk_index INT NOT NULL,
-  storage_key TEXT NOT NULL,           -- local file path now, object key later
-  iv_hex      TEXT NOT NULL,           -- 12-byte nonce, hex-encoded
-  chunk_hash  TEXT NOT NULL,           -- SHA256 of ciphertext
-  size_bytes  INT NOT NULL,            -- plaintext size
+  storage_key TEXT NOT NULL,           -- opaque random key (secrets.token_hex(16))
+  iv_hex      TEXT NOT NULL,           -- 12-byte nonce, hex
+  chunk_hash  TEXT NOT NULL,           -- SHA256(ciphertext incl. GCM tag)
+  size_bytes  INT NOT NULL,
   UNIQUE(document_id, chunk_index)
 );
--- NOTE: no auth_tag column. Python's AESGCM appends the 16-byte GCM tag to the ciphertext,
--- so the tag lives inside the MinIO object. chunk_hash (SHA256 of the stored ciphertext,
--- tag included) is what we persist and re-check on download.
+-- Note: ordering is in chunk_index only — storage_key has no structure.
 
--- Audit Events (append-only)
+-- Audit Events (append-only at DB level)
 CREATE TABLE audit_events (
   id              BIGSERIAL PRIMARY KEY,
   event_type      TEXT NOT NULL,
@@ -260,47 +292,41 @@ CREATE TABLE audit_events (
   target_id       UUID,
   case_id         UUID,
   ip_address      INET,
-  metadata        JSONB,               -- non-sensitive context only
+  user_agent      TEXT,
+  metadata        JSONB,
   prev_hash       TEXT NOT NULL,
   this_hash       TEXT NOT NULL,
   created_at      TIMESTAMPTZ DEFAULT now()
 );
--- Audit table: no UPDATE, no DELETE — enforce via Postgres row security or app constraint
+REVOKE UPDATE, DELETE ON audit_events FROM dms_app_user;  -- in migration
 ```
 
 ---
 
-## Security Threat Model (Summary)
+## Security Threat Model
 
+See `docs/THREAT_MODEL.md` for the full three-column table (defended / partially addressed /
+out of scope) matching the slide-4 claim.
+
+Short summary:
 | Threat | Mitigation |
 |--------|-----------|
-| Stolen DB access | DB holds only metadata; chunks are ciphertext in the chunk store; keys are in the KMS. DB alone is useless. |
-| Stolen chunk store | Chunks are AES-256-GCM encrypted; keys live in the KMS, not the chunk store; each chunk needs a different derived key |
-| Insider threat (admin) | Audit trail records all actions; hash chain detects retroactive tampering |
-| Document tampering | GCM auth tag per chunk + overall integrity hash; any modification detected on download |
-| Session hijacking | JWT + MFA required. *Prototype:* 8h token in localStorage. *Production:* 15-min access + httpOnly refresh + rotation |
-| Brute force | Rate limiting (in-memory) + account lockout after 5 failures |
-| SQL injection | SQLAlchemy ORM with parameterized queries only |
-| XSS | No document content in browser storage. *Production:* CSP headers via Nginx |
-| MITM | *Production:* TLS 1.3 + HSTS via Nginx (prototype runs on localhost HTTP) |
-| Audit tampering | Hash-chained audit log; Postgres INSERT-only policy on audit_events |
+| Server A (metadata) compromised alone | Chunk ordering is opaque storage keys — no document content, no keys |
+| Server B (chunk store) compromised alone | Ciphertext only; no keys, no DB, no structure in filenames |
+| DBA reading evidence content | DB has only metadata; content is AES-256-GCM encrypted in chunk store |
+| Stolen credentials without second factor | TOTP required at login + step-up before sensitive actions |
+| Audit trail retroactive edit | REVOKE UPDATE/DELETE at DB; hash chain detects any remaining tampering |
+| Document modification in chunk store | GCM auth tag + SHA256 chunk_hash; integrity_hash; all verified before serving |
 
 ---
 
 ## Future / Production Architecture
 
-The prototype's simple parts are swapped for scalable services when we expand. The code already
-isolates each behind a small interface, so these are drop-in changes, not rewrites:
-
 | Prototype (now) | Production (later) | Swap point |
 |-----------------|--------------------|-----------|
-| Local disk `./data/chunks` | **MinIO / S3** object storage | `storage/chunk_store.py` |
-| Local file KMS `./data/keys` | **HashiCorp Vault** | `core/kms.py` |
-| 8h JWT in localStorage | 15-min access + **httpOnly refresh cookie + rotation** (Redis) | `core/security.py`, frontend auth |
-| In-memory rate limiting | **Redis**-backed limiter + TOTP replay guard | `extensions.py`, `core/totp.py` |
-| On-demand cleanup function | **Celery + beat** scheduled jobs (also OCR, embeddings) | `tasks/` |
-| `flask run` on localhost | **Gunicorn + Nginx** (TLS, HSTS, CSP, security headers) | `Dockerfile`, `infra/` |
-
-The document data flows (chunk → encrypt → store; fetch → verify → decrypt), the audit hash
-chain, RBAC, MFA, and signatures are unchanged across both — only the storage/transport backends
-differ.
+| Local disk chunk store (Server B via sftp) | **MinIO / S3** object storage | `storage/chunk_store.py` |
+| Local file KMS (app host) | **HashiCorp Vault** (third host) | `core/kms.py` |
+| 8h JWT in localStorage | 15-min access + **httpOnly refresh cookie** (Redis) | `core/security.py`, frontend auth |
+| In-memory rate limiting | **Redis**-backed limiter + TOTP replay guard | `extensions.py` |
+| OCR inline on upload | **Background worker** (Celery + beat) | `tasks/` |
+| `flask run` on localhost | **Gunicorn + Nginx** (TLS, HSTS, CSP) | `Dockerfile`, `infra/` |

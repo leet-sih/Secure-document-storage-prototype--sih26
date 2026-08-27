@@ -8,7 +8,7 @@ Digital signatures allow authorized users to cryptographically sign a document, 
 
 Each signature is tied to the document's `integrity_hash` (the SHA-256 of all chunk hashes). If the document is tampered with after signing, the signature becomes invalid and the system reports this on verification.
 
-This gives documents legal validity — a signed forensic report, charge sheet, or FIR can be verified to have been approved by a specific officer and not altered since approval.
+This gives documents a **cryptographically signed** record of who approved them and that they are unaltered since approval. Legal admissibility of digital signatures for court proceedings is out of scope for this prototype — PRAMAAN does not make legal admissibility claims. A production deployment would require certified PKI and e-signature frameworks.
 
 ---
 

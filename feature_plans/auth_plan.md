@@ -1,12 +1,13 @@
-# Feature Plan: Authentication & MFA
+# Feature Plan: Authentication, MFA & Step-Up MFA
 
 ## What Is This Feature?
 
-The authentication system is the front door to the entire platform. Every user — officer, investigator, prosecutor, auditor — must prove their identity before accessing any data. It is composed of three layers:
+The authentication system is the front door to the entire platform. Every user — officer, investigator, prosecutor, auditor — must prove their identity before accessing any data. It is composed of four layers:
 
 1. **Credential authentication** — email + password verified against a bcrypt hash
 2. **Multi-Factor Authentication (TOTP)** — a 6-digit time-based one-time password from an authenticator app
-3. **Session management** — short-lived JWT access tokens + long-lived refresh tokens stored in httpOnly cookies
+3. **Session management** — JWT access tokens (8h in prototype)
+4. **Step-up MFA** — TOTP re-check required before sensitive actions if session's last MFA check is older than 15 minutes
 
 This feature has no "nice to have" parts. Every component is P0.
 
@@ -80,7 +81,8 @@ Server:
        store SHA256(refresh_token) in Redis with key "refresh:{user_id}:{token_hash}"
        TTL = 7 days
   7. Return access_token in JSON body
-     Set refresh_token as httpOnly, Secure, SameSite=Strict cookie
+     Prototype: no refresh token/cookie — single 8h access token
+     Token payload includes `mfa_at: unix_timestamp_now` (epoch seconds)
   8. Record AuditEvent: LOGIN
 ```
 
@@ -96,7 +98,7 @@ Server:
   3. Save encrypted secret to user.totp_secret_pending (not active yet)
   4. Return:
      {
-       "otpauth_uri": "otpauth://totp/SecureDMS:email@example.com?secret=...&issuer=SecureDMS",
+       "otpauth_uri": "otpauth://totp/PRAMAAN:email@example.com?secret=...&issuer=PRAMAAN",
        "qr_code_base64": "<PNG base64>"  # generated with qrcode library
      }
 
@@ -127,19 +129,53 @@ Server:
   7. Record AuditEvent: TOKEN_REFRESHED
 ```
 
-### Step 5: Logout
+### Step 5: Step-Up MFA (prototype — new requirement from deck slide 2)
+
+Sensitive actions are guarded by `@require_recent_mfa(minutes=15)` in `core/rbac.py`.
+The decorator reads the `mfa_at` claim from the JWT. If `now() - mfa_at > 900s`, it returns:
+
+```
+HTTP 401
+{ "code": "MFA_REQUIRED", "message": "Please verify your identity to continue." }
+```
+
+The frontend must detect `code == "MFA_REQUIRED"` (not the same as a full 401 session expiry)
+and show a step-up TOTP prompt instead of redirecting to /login.
+
+```
+POST /api/v1/auth/mfa/step-up
+Body: { "totp_code": "123456" }
+(requires valid access_token — not a new login)
+
+Server:
+  1. @jwt_required() — verify token is valid
+  2. Load user; decrypt totp_secret
+  3. pyotp.TOTP(secret).verify(totp_code, valid_window=1)
+     - If fail: increment step-up failure counter; AuditEvent: MFA_STEP_UP_FAILED; return 401
+  4. Issue new access_token with mfa_at = now() (all other claims identical)
+  5. AuditEvent: MFA_STEP_UP_VERIFIED
+  6. Return { "access_token": "..." }
+```
+
+Rate limit: 5/minute per user on `/auth/mfa/step-up`.
+
+**Sensitive action set (requires step-up MFA):**
+- `POST /documents/{id}/sign`
+- `POST /documents/{id}/share`
+- `DELETE /documents/{id}`
+- `POST /users` (create user)
+- `PATCH /users/{id}/deactivate`
+- `PATCH /users/{id}/role`
+
+### Step 6: Logout
 
 ```
 POST /api/v1/auth/logout
 (requires valid access_token)
 
 Server:
-  1. Read refresh_token from cookie
-  2. Delete "refresh:{user_id}:{token_hash}" from Redis
-  3. Optionally: add access_token jti to a short-lived Redis blocklist
-     (access tokens are short-lived so this is optional)
-  4. Clear cookie
-  5. Record AuditEvent: LOGOUT
+  1. Clear token client-side (prototype has no server-side revocation)
+  2. Record AuditEvent: LOGOUT
 ```
 
 ---
@@ -265,10 +301,13 @@ class PasswordChangeSchema(Schema):
 | `MFASetup` | `/mfa-setup` | QR code display + confirmation code input |
 | `SessionTimeout` | Global | Modal warning 2 min before access token expiry; auto-refresh on activity |
 
-### Frontend session strategy
-- `access_token` stored in memory (JS variable in Zustand store) — NOT localStorage, NOT sessionStorage
-- On page reload: call `POST /auth/refresh` immediately (cookie is sent automatically) to restore session
-- Axios interceptor: on 401 response, attempt refresh once, then redirect to `/login`
+### Frontend session strategy (prototype)
+- `access_token` stored in localStorage (TOKEN_KEY = "dms_access_token") for prototype convenience
+- `AuthContext.tsx` (React Context + useReducer) holds user and status; reads token from localStorage on mount
+- `apiFetch()` reads token directly from localStorage — works outside the component tree
+- On 401 with `{ code: "MFA_REQUIRED" }`: show step-up TOTP modal, call `/auth/mfa/step-up`, replace token, retry
+- On 401 without that code: clear localStorage and redirect to /login
+- No Zustand, no Axios (removed in CHANGES.md §5)
 - No document data cached in browser storage ever
 
 ---
@@ -357,12 +396,13 @@ cryptography==43.*       # for TOTP secret encryption
 
 ## Implementation Order
 
-1. User model + migration
-2. `auth_service.py` — `verify_credentials()`, `issue_tokens()`, `verify_totp()`
-3. `auth.py` blueprint — `/login`, `/mfa/verify`, `/refresh`, `/logout`
-4. Rate limiting setup
-5. `/mfa/setup` + `/mfa/confirm`
-6. Frontend: LoginForm → MFAStep flow
-7. Frontend: Axios interceptor + session restore on reload
-8. Frontend: MFASetup page
-9. Tests
+1. User model + migration (include `mfa_at` in JWT payload — not a DB column)
+2. `auth_service.py` — `verify_credentials()`, `issue_tokens()` (with `mfa_at` claim), `verify_totp()`
+3. `auth.py` blueprint — `/login`, `/mfa/verify`, `/mfa/step-up`, `/logout`
+4. `core/rbac.py` — `@require_roles` + `@require_recent_mfa(minutes)` decorators
+5. Rate limiting setup (in-memory for prototype)
+6. `/mfa/setup` + `/mfa/confirm`
+7. Frontend: LoginForm → MFAStep flow (AuthContext.tsx, no Zustand)
+8. Frontend: Step-up MFA modal (triggered on MFA_REQUIRED 401)
+9. Frontend: MFASetup page
+10. Tests — add `test_step_up_mfa.py`

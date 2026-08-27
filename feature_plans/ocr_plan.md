@@ -1,7 +1,18 @@
-# Feature Plan: OCR-Based Document Digitisation (Future Roadmap)
+# Feature Plan: OCR-Based Document Digitisation
 
-> **Status:** Post-hackathon roadmap. Do NOT implement for the Sep 2 prototype.
-> Prototype milestone: show a placeholder UI card "OCR — Coming Soon" in the upload flow.
+> **Status:** PROTOTYPE SCOPE — Day 6 (Aug 29). Implement for Sep 2. See docs/TODO.md Phase 5.
+>
+> **Execution model — NO Celery:** Run OCR inline on the upload request, after chunks are stored
+> and the document record is committed. For the prototype (1–2 page scans typical in demo),
+> inline is fast enough and simplest to demo. Hard page cap: refuse OCR for docs > 50 pages;
+> set ocr_status=FAILED and log the reason. This keeps the upload response time predictable.
+>
+> **Language packs:** The deck names five Indic scripts — install all five or change the slide:
+> Hindi (Devanagari), Tamil, Telugu, Bengali, Gujarati. See Dockerfile section below.
+>
+> **Security line:** OCR reconstructs the document in memory on the app server, writes only
+> derived text (search_text) to the database, and NEVER persists a decrypted file to disk.
+> This is the answer a judge will ask for — keep it in the code comment too.
 
 ---
 
@@ -181,17 +192,20 @@ A CASE_OFFICER with LOW_CONFIDENCE documents can manually correct the extracted 
 
 ---
 
-## UI (Placeholder for Prototype)
+## UI (Prototype)
 
-For the Sep 2 prototype, show this in the document detail view:
+Show OCR status on the document detail view using the ocr_status value:
 
 ```
-[ OCR Status ]
-  ⏳ OCR coming soon — this document is not yet text-searchable.
-  Documents will be automatically indexed after OCR is enabled.
+DONE           →  ✓ Text extracted (confidence: 92%)
+LOW_CONFIDENCE →  ⚠ Extracted with low confidence (72%) — review recommended
+FAILED         →  ✗ OCR failed — manual transcription required
+NOT_APPLICABLE →  (no badge — plaintext document)
+PENDING        →  ⏳ Processing…
 ```
 
-Do not implement the actual pipeline — just reserve the DB columns and the UI slot.
+A CASE_OFFICER with LOW_CONFIDENCE documents can manually correct the extracted text via a
+plain textarea in the UI. Corrections update search_text and re-trigger the FTS index.
 
 ---
 
@@ -206,73 +220,49 @@ opencv-python-headless==4.10.*
 numpy==1.26.*
 ```
 
-System packages (Docker):
+System packages (Docker) — all five Indic packs from the deck:
 ```dockerfile
-RUN apt-get install -y tesseract-ocr tesseract-ocr-hin tesseract-ocr-tam \
-    poppler-utils libglib2.0-0 libsm6 libxrender1 libxext6
+RUN apt-get install -y \
+    tesseract-ocr \
+    tesseract-ocr-hin \
+    tesseract-ocr-tam \
+    tesseract-ocr-tel \
+    tesseract-ocr-ben \
+    tesseract-ocr-guj \
+    poppler-utils \
+    libglib2.0-0 libsm6 libxrender1 libxext6
 ```
 
 ---
 
-## Celery Task
+## Inline Execution (Prototype — no Celery)
+
+Called from `document_service.py` after upload completes, before returning the HTTP response:
 
 ```python
-@celery.task(bind=True, max_retries=3, default_retry_delay=60)
-def process_ocr_task(self, document_id: str):
-    try:
-        document = Document.query.get(document_id)
-        document.ocr_status = "IN_PROGRESS"
-        db.session.commit()
-
-        # Reconstruct document from chunks (full decryption)
-        file_bytes = document_service.reconstruct_bytes(document_id)
-
-        # Convert to images
-        images = pdf_to_images(file_bytes, mime_type=document.mime_type)
-
-        all_text = []
-        confidences = []
-
-        for img in images:
-            processed = preprocess_image(img)
-            data = pytesseract.image_to_data(
-                processed,
-                lang=document.ocr_language,
-                output_type=pytesseract.Output.DICT
-            )
-            page_text = " ".join(w for w in data['text'] if w.strip())
-            page_conf = [c for c in data['conf'] if c != -1]
-            all_text.append(page_text)
-            if page_conf:
-                confidences.append(sum(page_conf) / len(page_conf))
-
-        full_text = "\n\n".join(all_text)
-        avg_confidence = sum(confidences) / len(confidences) if confidences else 0
-
-        document.search_text = full_text
-        document.ocr_confidence = avg_confidence / 100  # Tesseract gives 0-100
-        document.ocr_page_count = len(images)
-        document.ocr_status = (
-            "DONE" if avg_confidence >= 80
-            else "LOW_CONFIDENCE" if avg_confidence >= 60
-            else "FAILED"
-        )
-        db.session.commit()
-
-    except Exception as exc:
-        document.ocr_status = "FAILED"
-        db.session.commit()
-        raise self.retry(exc=exc)
+def run_ocr_inline(document: Document) -> None:
+    """Run OCR synchronously on the just-uploaded document.
+    Writes OCR text to document.search_text (FTS trigger fires automatically).
+    NEVER writes decrypted file to disk — all processing in memory.
+    Hard cap: skip OCR if page count > 50; set FAILED.
+    """
+    # TODO: implement using core/ocr.py
+    raise NotImplementedError
 ```
+
+Execution model options (choose one, document in the plan):
+- **Inline (chosen for prototype):** simple, demos fine for 1–2 pages.
+- `threading.Thread` after response returned: faster response, status shows PENDING briefly.
+- `flask ocr-pending` CLI command: operator-run before demo.
 
 ---
 
-## Implementation Order (When Ready)
+## Implementation Order
 
-1. Add OCR columns to documents migration
-2. Install tesseract + language packs in Docker image
-3. `backend/app/core/ocr.py` — preprocess_image, run_tesseract, confidence scoring
-4. `backend/app/tasks/ocr_task.py` — Celery task
-5. Wire into upload pipeline: after upload completes, queue `process_ocr_task.delay(doc_id)`
-6. `PATCH /documents/{id}/ocr-text` — manual correction endpoint
-7. Frontend: OCR status badge on document cards; manual correction editor
+1. Add OCR columns to documents migration (`ocr_status`, `ocr_confidence`, `ocr_language`, `ocr_page_count`)
+2. Install tesseract + all five Indic language packs in Dockerfile
+3. `backend/app/core/ocr.py` — `preprocess_image()`, `run_tesseract()`, `score_confidence()`
+4. Wire `run_ocr_inline()` into upload pipeline in `document_service.py` (after chunks stored)
+5. Verify OCR text reaches `Document.search_text` so FTS trigger picks it up
+6. `PATCH /documents/{id}/ocr-text` — manual correction endpoint (LOW_CONFIDENCE case)
+7. Frontend: OCR status badge on document cards; manual correction textarea

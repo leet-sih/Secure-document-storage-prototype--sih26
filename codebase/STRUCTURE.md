@@ -56,8 +56,8 @@ codebase/
 │   ├── package.json vite.config.ts tsconfig.json tailwind.config.js index.html Dockerfile
 │   └── src/
 │       ├── main.tsx App.tsx index.css
-│       ├── lib/apiClient.ts      # Axios; attaches token, logs out on 401 (single API source)
-│       ├── store/authStore.ts    # session; token in localStorage (prototype)
+│       ├── lib/apiClient.ts      # apiFetch (native fetch); attaches token, logs out on 401 (single API source)
+│       ├── store/AuthContext.tsx # session (React Context + useReducer); token in localStorage (prototype)
 │       ├── hooks/useAuth.ts
 │       ├── types/index.ts        # mirrors backend response schemas
 │       ├── components/ (README + ProtectedRoute.tsx)

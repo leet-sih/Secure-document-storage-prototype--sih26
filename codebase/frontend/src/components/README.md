@@ -1,6 +1,6 @@
 # src/components/ — reusable UI components
 
-Presentational + small stateful widgets shared across pages. No direct Axios calls (take
+Presentational + small stateful widgets shared across pages. No direct apiFetch() calls (take
 data/handlers via props, or use a hook).
 
 | Component | Responsibility |
@@ -12,7 +12,8 @@ data/handlers via props, or use a hook).
 | `DocumentUploader.tsx` | Drag-and-drop upload with XHR progress; client-side type/size check before POST. |
 | `DocumentList.tsx` | Table of documents with type/date filters + download/delete actions. |
 | `SignaturePanel.tsx` | List signatures + validity badges + "Verify" + "Sign" buttons. |
-| `ShareModal.tsx` | Create share link; show the raw URL ONCE with a copy button + "won't be shown again". |
+| `ShareModal.tsx` | Create share link; `allowed_email` field required; show the raw URL ONCE with a copy button + "won't be shown again". |
+| `StepUpMfaModal.tsx` | Triggered on `401 { code: "MFA_REQUIRED" }`; accepts TOTP code, calls `/auth/mfa/step-up`, replaces token, retries action. |
 | `AuditTable.tsx` | Paginated audit rows, severity color-coding, detail modal. |
 | `ChainVerifyBadge.tsx` | Calls GET /audit/verify; shows "Chain Valid ✓" or "TAMPERING DETECTED ✗". |
 | `SessionTimeout.tsx` | Warns ~2 min before access-token expiry; refreshes on activity. |

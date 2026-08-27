@@ -2,9 +2,9 @@
 
 ## What Is This Feature?
 
-Every action performed in the system — login, document upload, download, case access, role change — is recorded as an immutable audit event. These events are chained together cryptographically: each event includes the SHA-256 hash of the previous event. This makes the audit log tamper-evident: if anyone modifies, deletes, or inserts a record in the middle of the chain, every subsequent hash breaks. A verification endpoint recomputes the entire chain and reports any inconsistency.
+Every action performed in the system — login, document upload, download, case access, role change — is recorded as a tamper-evident audit event. These events are hash-chained: each event includes the SHA-256 hash of the previous event. If anyone modifies, deletes, or inserts a record in the middle of the chain, every subsequent hash breaks. A verification endpoint recomputes the entire chain and reports `first_break_at` — the ID of the first event where the chain fails.
 
-This is a "blockchain-lite" approach — the same integrity guarantee as a blockchain, with no external dependency, no consensus overhead, and no cryptocurrency.
+This is a hash-chained, tamper-evident audit trail — detection-focused, not immutable. A sufficiently privileged attacker who rewrites all subsequent hashes after a target row would pass verification; the DB-level REVOKE closes the easy path (see §Database Schema). No external blockchain dependency; no consensus overhead.
 
 ---
 
@@ -12,11 +12,10 @@ This is a "blockchain-lite" approach — the same integrity guarantee as a block
 
 Legal and regulatory requirements for law enforcement document systems mandate a complete, non-repudiable record of who accessed what and when. Specifically:
 
-- **Legal admissibility** — Courts need to know whether evidence was accessed only by authorized parties
+- **Evidence chain integrity** — Courts need to know whether evidence was accessed only by authorized parties
 - **Insider threat detection** — An officer who downloads a confidential witness statement at 2 AM is flagged
-- **Compliance** — NCRB regulations require audit trails for all sensitive document access
 - **Non-repudiation** — Users cannot deny actions the audit trail records
-- **Tamper detection** — Even a compromised DBA cannot silently alter past audit records
+- **Tamper detection** — Even a compromised DBA cannot silently alter past audit records via the app user (REVOKE UPDATE/DELETE; chain break is detected on verify)
 
 ---
 
@@ -101,6 +100,8 @@ class AuditEventType(str, Enum):
     TOKEN_REFRESHED             = "TOKEN_REFRESHED"
     MFA_ENABLED                 = "MFA_ENABLED"
     MFA_VERIFIED                = "MFA_VERIFIED"
+    MFA_STEP_UP_VERIFIED        = "MFA_STEP_UP_VERIFIED"   # fresh TOTP for sensitive action
+    MFA_STEP_UP_FAILED          = "MFA_STEP_UP_FAILED"     # wrong code at step-up
     ACCOUNT_LOCKED              = "ACCOUNT_LOCKED"
     PASSWORD_CHANGED            = "PASSWORD_CHANGED"
     RATE_LIMIT_EXCEEDED         = "RATE_LIMIT_EXCEEDED"
@@ -162,6 +163,7 @@ CREATE TABLE audit_events (
     target_id       UUID,
     case_id         UUID,                           -- denormalized for fast case-level filtering
     ip_address      INET,
+    user_agent      TEXT,                           -- captured on SHARE_LINK_ACCESSED + auth events
     metadata        JSONB,                          -- non-sensitive context only
     prev_hash       TEXT NOT NULL,                  -- 64-char hex
     this_hash       TEXT NOT NULL,                  -- 64-char hex

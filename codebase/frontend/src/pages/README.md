@@ -1,12 +1,12 @@
 # src/pages/ — route-level components
 
-One component per route. Pages compose components/, call hooks/, and never talk to Axios
+One component per route. Pages compose components/, call hooks/, and never call apiFetch()
 directly except through hooks or lib/apiClient. Each page owns its data fetching + loading/
 error states.
 
 | File | Route | Role | Responsibility |
 |------|-------|------|----------------|
-| `LoginPage.tsx` | `/login` | public | Email+password, then MFA code step. Handles `mfaSetupRequired`. |
+| `LoginPage.tsx` | `/login` | public | Email+password, then MFA code step. Handles `mfaSetupRequired` and `MFA_REQUIRED` step-up prompt. |
 | `MfaSetupPage.tsx` | `/mfa-setup` | auth | Show QR + confirm code to activate MFA. |
 | `ChangePasswordPage.tsx` | `/change-password` | auth | Forced on first login; strength meter. |
 | `DashboardPage.tsx` | `/` | auth | Grid of accessible cases; create-case modal. |

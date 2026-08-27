@@ -1,5 +1,6 @@
 """
 config.py — centralized configuration, loaded from environment variables.
+PRAMAAN — Secure Evidence Vault (leet / SIH26)
 
 WHAT THIS FILE DOES:
     Defines Config classes read by create_app(). Every value comes from an env var
@@ -7,8 +8,14 @@ WHAT THIS FILE DOES:
 
 PROTOTYPE NOTE:
     Kept intentionally small. No Redis / MinIO / Vault / Celery config — the prototype uses
-    the local filesystem for chunks and a local file KMS for keys. Those get added back when
-    we scale up (see docs/ARCHITECTURE.md "Future / production").
+    a two-server topology (PostgreSQL on Server A, chunk store on Server B) with a local file
+    KMS. Those get upgraded when we scale up (see docs/ARCHITECTURE.md "Future / production").
+
+KEY SEPARATION (important):
+    SECRET_KEY     — Flask cookie/session signing ONLY.
+    KMS_WRAPPING_KEY — wraps document master keys in the local file KMS. NEVER the same value
+                      as SECRET_KEY. Two separate jobs, two separate secrets.
+    JWT_SECRET     — signs JWT access tokens. Also separate.
 
 EXPORTS:
     Config, DevelopmentConfig, ProductionConfig, get_config()
@@ -19,7 +26,7 @@ import os
 
 class Config:
     # ── Flask ──
-    SECRET_KEY = os.environ["SECRET_KEY"]
+    SECRET_KEY = os.environ["SECRET_KEY"]       # cookie/session signing ONLY
     ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
@@ -31,24 +38,34 @@ class Config:
     JWT_SECRET_KEY = os.environ["JWT_SECRET"]
     JWT_ACCESS_TTL_SECONDS = int(os.environ.get("JWT_ACCESS_TTL_SECONDS", 28800))  # 8h for demo
 
-    # ── MFA / lockout ──
-    MFA_ISSUER = os.environ.get("MFA_ISSUER", "SecureDMS")
+    # ── MFA / lockout / step-up ──
+    MFA_ISSUER = os.environ.get("MFA_ISSUER", "PRAMAAN")
+    MFA_STEP_UP_MINUTES = int(os.environ.get("MFA_STEP_UP_MINUTES", 15))  # step-up window
     ACCOUNT_LOCKOUT_THRESHOLD = int(os.environ.get("ACCOUNT_LOCKOUT_THRESHOLD", 5))
     ACCOUNT_LOCKOUT_MINUTES = int(os.environ.get("ACCOUNT_LOCKOUT_MINUTES", 15))
 
-    # ── Local storage (prototype replacements for MinIO + Vault) ──
+    # ── Chunk store (two-server topology) ──
+    # CHUNK_STORE_BACKEND selects the driver: "local" (dev) or "sftp" (Server B demo).
+    # document_service never changes — dispatch is internal to storage/chunk_store.py.
+    CHUNK_STORE_BACKEND = os.environ.get("CHUNK_STORE_BACKEND", "local")
+    CHUNK_STORE_HOST = os.environ.get("CHUNK_STORE_HOST", "")    # Server B hostname (sftp)
     CHUNK_STORAGE_DIR = os.environ.get("CHUNK_STORAGE_DIR", "./data/chunks")
+    CHUNK_STORE_USER = os.environ.get("CHUNK_STORE_USER", "")
+    CHUNK_STORE_KEYFILE = os.environ.get("CHUNK_STORE_KEYFILE", "")  # SSH key, no passwords
+
+    # ── KMS (local file store — prototype; Vault in production) ──
     KMS_DIR = os.environ.get("KMS_DIR", "./data/keys")
+    KMS_WRAPPING_KEY = os.environ["KMS_WRAPPING_KEY"]   # wraps master keys; NOT SECRET_KEY
 
     # ── Uploads ──
-    MAX_FILE_SIZE_MB = int(os.environ.get("MAX_FILE_SIZE_MB", 100))
+    MAX_FILE_SIZE_MB = int(os.environ.get("MAX_FILE_SIZE_MB", 500))   # 500 MB prototype limit
     CHUNK_SIZE_BYTES = int(os.environ.get("CHUNK_SIZE_BYTES", 1048576))  # 1 MB
     MAX_CONTENT_LENGTH = MAX_FILE_SIZE_MB * 1024 * 1024
 
     # ── CORS (allow the Vite dev server) ──
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
 
-    # ── Rate limiting (in-memory for the prototype) ──
+    # ── Rate limiting (in-memory for the prototype; Redis-backed in production) ──
     RATELIMIT_STORAGE_URI = "memory://"
 
 

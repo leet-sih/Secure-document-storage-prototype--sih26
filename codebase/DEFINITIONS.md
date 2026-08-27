@@ -1,4 +1,4 @@
-# DEFINITIONS — Technical Glossary for the Secure DMS Codebase
+# DEFINITIONS — Technical Glossary for the PRAMAAN Codebase
 
 Every technical term, library, and pattern used in this project — explained in plain English
 with a concrete example and **where it lives in our code**. If you hit a word you don't know
@@ -168,7 +168,8 @@ Issues and verifies **JWT** access tokens (see §4). Provides `@jwt_required()` 
 
 ### Flask-Limiter
 **Rate limiting** — caps how many requests an IP/user can make in a time window, to stop brute
-force and scraping. Backed by Redis.
+force and scraping. **Prototype:** backed by in-memory storage (`memory://`). Production:
+Redis-backed for cross-worker accuracy.
 ```python
 @auth_bp.route("/login")
 @limiter.limit("5 per minute")
@@ -198,25 +199,30 @@ The library that does our real encryption: **AES-256-GCM**, **HKDF** key derivat
 **Ed25519** signatures (see §4). All raw crypto is confined to two files.
 📁 `core/crypto.py` (AES/HKDF), `core/signing.py` (Ed25519).
 
-### minio (client)
-Python client for **MinIO** object storage (see §5). We use it to `put`/`get`/`delete` the
-encrypted document chunks.
-📁 `storage/minio_client.py`.
+### chunk_store (local, prototype)
+Provides `put_chunk`, `get_chunk`, and `delete_document` over **local disk**. Encrypted chunks
+land in `./data/chunks/{doc_id}/chunk_000000`. In production this swaps to MinIO (same API,
+different backend — that's the whole point of the interface).
+📁 `storage/chunk_store.py`.
 
-### redis (client)
-Python client for **Redis** (see §6). We store refresh tokens, rate-limit counters, and the
-TOTP replay guard here.
-📁 used by `core/security.py`, `core/totp.py`, `limiter`.
+### minio (client) — deferred to production
+Python client for **MinIO** object storage. Not used in the prototype — the local chunk store
+replaces it. MinIO returns when we move to production (see `infra/README.md`).
 
-### celery
-Runs **background jobs** outside the request/response cycle (so slow work doesn't block the
-API). Example: hourly cleanup of failed uploads; later, OCR.
-📁 `tasks/celery_app.py`, `tasks/cleanup_task.py`.
+### redis (client) — deferred to production
+Python client for **Redis**. Not used in the prototype. Redis comes back when we add refresh
+tokens, Redis-backed rate limiting, and the TOTP replay guard in production.
 
-### hvac
-Python client for **HashiCorp Vault** (see §5 KMS). Used when `KMS_BACKEND=vault` to store
-document master keys.
-📁 `core/kms.py` (`VaultKMS`).
+### celery — deferred to production
+Runs **background jobs** outside the request/response cycle. Not used in the prototype; cleanup
+is a plain function instead. Celery + beat return in production for scheduled cleanup, OCR, and
+embedding jobs.
+📁 `tasks/maintenance.py` (`sweep_orphaned_documents()` — called on demand, not scheduled).
+
+### hvac — deferred to production
+Python client for **HashiCorp Vault**. Not used in the prototype — the local file KMS replaces
+it. Vault returns in production via `core/kms.py`.
+📁 `core/kms.py`.
 
 ### python-magic
 Detects a file's real type by reading its **magic bytes** (the signature at the start of the
@@ -237,10 +243,11 @@ our API from a browser. We allow only our own frontend origin, with credentials 
 Rule: never log document content, passwords, keys, or PII — only IDs and event types.
 📁 wired in `app/__init__.py` `_configure_logging`.
 
-### gunicorn
-The production **WSGI server** that actually runs Flask under load, with multiple worker
-processes. `--timeout 600` so big uploads/downloads aren't killed.
-📁 `backend/Dockerfile`, serves `wsgi:app`.
+### gunicorn — deferred to production
+The production **WSGI server** that runs Flask under load with multiple worker processes. Not
+used in the prototype — the Dockerfile runs `flask run` instead. Gunicorn comes back when we
+switch to production.
+📁 `backend/Dockerfile` (`flask run` now; Gunicorn later).
 
 ### psycopg
 The **PostgreSQL driver** — the low-level library SQLAlchemy uses to talk to Postgres. We use
@@ -296,8 +303,12 @@ chunk_key = HKDF(master_key, salt=doc_id, info=f"chunk-{i}")
 
 ### Chunked encrypted storage (our core innovation)
 Instead of encrypting a document as one blob, we split it into 1 MB **chunks**, encrypt each
-with its own derived key, and store them as separate objects in MinIO. The master key lives in
-Vault. A thief needs the DB **and** MinIO **and** Vault to read anything.
+with its own derived key, and store them under **opaque random keys** (no structure in the
+filename). The master key lives in the KMS. The chunk ordering lives only in the DB.
+A thief needs the DB **and** chunk store **and** KMS — and the DB alone reveals nothing about
+document structure from the chunk store.
+**Prototype:** chunk store = `./data/chunks/` on Server B (local or sftp); KMS = `./data/keys/`.
+**Production:** chunk store = MinIO; KMS = HashiCorp Vault.
 📁 `services/document_service.py`, `feature_plans/chunked_document_storage_plan.md`.
 
 ### Integrity hash
@@ -319,37 +330,39 @@ document and that it hasn't changed since.
 
 ### Hash chain (tamper-evident audit log)
 Each audit event stores the hash of the previous event (`prev_hash`) plus its own hash
-(`this_hash`). Changing any past event breaks every hash after it — like a mini blockchain,
-with no external dependency. `GET /audit/verify` recomputes the chain to detect tampering.
+(`this_hash`). Changing any past event breaks every hash after it. `GET /audit/verify`
+recomputes the chain and returns `first_break_at` — the ID of the first failing event.
+**Tamper-evident** means modification is *detectable*, not impossible.
 📁 `services/audit_service.py`, `models/audit_event.py`.
 
 ### JWT (JSON Web Token)
 A signed token the client sends on every request to prove who they are. It's **stateless** —
-the server verifies the signature instead of looking it up. Ours are short-lived (15 min) and
-carry the user's id + role. Format: `header.payload.signature`.
+the server verifies the signature instead of looking it up. **Prototype:** 8h access token, no
+refresh flow. **Production:** 15-min access + 7-day refresh. Format: `header.payload.signature`.
 📁 `core/security.py` (`issue_access_token`), verified by `@jwt_required()`.
 
 ### Access token vs refresh token
-**Access token** = short-lived JWT sent on every API call (15 min). **Refresh token** =
-long-lived (7 days), stored in an httpOnly cookie, used only to get a new access token. Short
-access token = small damage window if stolen.
-📁 `core/security.py`, flow in `feature_plans/auth_plan.md`.
+**Access token** = JWT sent on every API call. **Prototype:** 8h TTL, stored in localStorage.
+**Production:** 15-min TTL (short damage window if stolen) + a long-lived **refresh token**
+(7 days, httpOnly cookie) to silently renew it without re-login.
+📁 `core/security.py`, full production flow in `feature_plans/auth_plan.md`.
 
-### httpOnly cookie
-A cookie that JavaScript **cannot** read, only the browser sends it automatically. We store the
-refresh token this way so an XSS attack can't steal it. The access token stays in JS memory
-(never localStorage).
-📁 set by `blueprints/auth.py`; frontend never touches it (`store/authStore.ts`).
+### httpOnly cookie — production feature
+A cookie that JavaScript **cannot** read. We plan to store the production refresh token this way
+(XSS-safe). **Prototype skips this** — only a single 8h access token, stored in localStorage.
+📁 planned in `blueprints/auth.py` (production); `store/authStore.ts` (prototype uses localStorage).
 
-### Token rotation
-Each time a refresh token is used, we delete it and issue a new one. A stolen refresh token is
-therefore single-use — reuse is detected.
-📁 `core/security.py` (`rotate_refresh_token`).
+### Token rotation — production feature
+Each time a refresh token is used, it's deleted and a new one issued — so a stolen token is
+single-use. **Not implemented in prototype** (no refresh tokens).
+📁 planned in `core/security.py`.
 
 ### MFA / TOTP (Multi-Factor Authentication)
 Requires a second proof beyond the password — a 6-digit **TOTP** code from an authenticator
 app that changes every 30 seconds. Even a stolen password isn't enough to log in.
-📁 `core/totp.py`, `feature_plans/auth_plan.md`.
+**Step-up MFA:** for sensitive actions (sign, share, delete, manage users), a fresh TOTP
+re-check is required if the session's last MFA verification is older than 15 minutes.
+📁 `core/totp.py`, `core/rbac.py` (`@require_recent_mfa`), `feature_plans/auth_plan.md`.
 
 ### RBAC (Role-Based Access Control)
 Permissions are tied to **roles**, not individuals. Our roles: SUPER_ADMIN, CASE_OFFICER,
@@ -438,47 +451,54 @@ PostgreSQL's built-in text search. A `tsvector` column holds pre-processed searc
 query matches against it. Powers metadata search without an external search engine.
 📁 `models/document.py` (`search_vector`), `services/search_service.py`.
 
-### MinIO / Object storage
-An **object store** = storage for arbitrary files ("objects") accessed by a key, S3-compatible.
-We store each encrypted chunk as an object at key `doc-chunks/{doc_id}/chunk_000001`. It only
-ever holds ciphertext.
-📁 `storage/minio_client.py`.
+### Local chunk store (prototype — Server B)
+The prototype's object storage. Encrypted chunks land on the filesystem at
+`./data/chunks/{opaque_storage_key}` — flat namespace, no doc IDs or chunk indexes in filenames.
+The chunk store lives on a separate host (Server B) in the demo. The interface
+(`put_chunk`, `get_chunk`, `delete_chunks`) is the swap point for MinIO in production.
+📁 `storage/chunk_store.py`.
+
+### MinIO / Object storage — production target
+An S3-compatible **object store** for arbitrary files. We'll store each encrypted chunk as an
+object at key `doc-chunks/{doc_id}/chunk_000001`. Deferred to production; prototype uses local
+disk via `chunk_store.py` instead.
 
 ### Bucket / Object key
 A **bucket** is a top-level container in object storage (ours: `doc-chunks`, private). An
-**object key** is the path to one object inside it.
-📁 `storage/minio_client.py`.
+**object key** is the path to one object inside it. Same concept applies to our local path
+`{doc_id}/chunk_000001` in the prototype.
 
-### HashiCorp Vault
-A dedicated secrets manager. In production it stores document **master keys** and user signing
-private keys. ⚠️ In dev mode it's in-memory — a restart wipes keys, so we default to the
-`EnvKMS` stub for the demo.
-📁 `core/kms.py`, `infra/vault/README.md`.
+### HashiCorp Vault — production target
+A dedicated secrets manager that stores document **master keys** and signing private keys.
+Deferred to production. **Prototype:** local file KMS (`core/kms.py`) stores AES-wrapped master
+keys at `./data/keys/{doc_id}.key` — same interface, simpler backend.
+📁 `core/kms.py` (both prototype and production share this interface).
 
 ---
 
 ## 6. Async jobs & infrastructure
 
-### Redis
-An in-memory data store, extremely fast. We use it for: refresh-token storage, rate-limit
-counters, the TOTP replay guard, and as Celery's message broker. Data here is temporary (has
-TTLs).
-📁 the `redis` container; used across `core/`.
+### Redis — deferred to production
+An in-memory data store, extremely fast. **Production** uses it for: refresh-token storage,
+rate-limit counters, the TOTP replay guard, and as Celery's message broker. **Prototype:** not
+running — rate limiting is in-memory (Flask-Limiter `memory://`), no refresh tokens, TOTP
+replay guard is skipped (valid_window=1 is the sole protection).
 
 ### TTL (Time To Live)
 An expiry on a stored value — after N seconds it auto-deletes. Example: a refresh token key
 lives 7 days; a used-TOTP marker lives 60 seconds.
 📁 Redis keys in `core/security.py`, `core/totp.py`.
 
-### Celery / Task / Worker / Broker / Beat
+### Celery / Task / Worker / Broker / Beat — deferred to production
 **Celery** runs background **tasks** so slow work doesn't block API responses. A **worker** is a
-process that executes tasks. The **broker** (Redis) is the queue that hands tasks to workers.
-**Beat** is the scheduler that fires periodic tasks (e.g. hourly cleanup).
+process that executes tasks. The **broker** (Redis) is the queue. **Beat** fires periodic tasks.
+**Prototype:** Celery is not running. Cleanup is a plain on-demand function instead.
 ```python
-@celery.task
-def sweep_orphaned_documents(): ...   # runs in the background
+# prototype (no Celery):
+from app.tasks.maintenance import sweep_orphaned_documents
+sweep_orphaned_documents()   # call this manually when needed
 ```
-📁 `tasks/celery_app.py`, `tasks/cleanup_task.py`.
+📁 `tasks/maintenance.py` (prototype); Celery + beat return in production.
 
 ### Idempotent
 An operation you can run repeatedly with the same result — no duplicates or damage. Our seed
@@ -486,8 +506,10 @@ script and startup migrations are idempotent so re-running them is safe.
 📁 `backend/seed.py`.
 
 ### Docker Compose
-A tool to define and run a multi-container app from one YAML file. `docker compose up` starts
-Postgres, Redis, MinIO, Vault, backend, Celery, frontend, and Nginx together.
+A tool to define and run a multi-container app from one YAML file. **Prototype:**
+`docker compose up postgres` starts only PostgreSQL — backend and frontend run locally with
+`flask run` and `npm run dev`. **Production:** full stack (Redis, MinIO, Vault, Celery, Nginx)
+all in compose.
 📁 `infra/docker-compose.yml`.
 
 ### Healthcheck / depends_on
@@ -546,18 +568,22 @@ A React function starting with `use` that adds behaviour/state to a component. B
 `useState`, `useEffect`. Ours: `useAuth()` bundles login/logout/session logic.
 📁 `frontend/src/hooks/useAuth.ts`.
 
-### Zustand (state management / store)
-A tiny library for **global state** shared across components. Our `authStore` holds the current
-session (access token + user) **in memory only** — never localStorage (XSS safety).
-```ts
-const useAuthStore = create((set) => ({ user: null, setSession: ... }));
+### AuthContext / useAuth (session management)
+React Context + `useReducer` holding `{ user, status }`. The access token is stored in
+`localStorage` (dms_access_token) for prototype convenience and read by `apiFetch()` directly —
+so the HTTP layer works outside the component tree. **Production:** in-memory token + httpOnly
+refresh cookie (no localStorage). Replaced Zustand (removed in CHANGES.md §5).
+```tsx
+const { user, setSession, clear } = useAuth();  // inside <AuthProvider>
 ```
-📁 `frontend/src/store/authStore.ts`.
+📁 `frontend/src/store/AuthContext.tsx`.
 
-### Axios / interceptor
-Axios is the HTTP client the frontend uses to call the API. An **interceptor** runs on every
-request/response — ours attaches the access token and, on a 401, silently refreshes the token
-and retries. All API calls go through this one instance.
+### apiFetch / native fetch (HTTP client)
+The single async function all API calls go through. Reads the access token from `localStorage`,
+attaches `Authorization: Bearer`, checks `res.ok` (fetch does NOT reject on 4xx/5xx — this
+check replaces what Axios did automatically), and handles 401 by clearing the token and
+redirecting to `/login`. On `401 { code: "MFA_REQUIRED" }`, shows the step-up TOTP modal
+instead of redirecting. Replaced Axios (removed in CHANGES.md §5).
 📁 `frontend/src/lib/apiClient.ts`.
 
 ### Tailwind CSS
@@ -607,13 +633,14 @@ case only if you're an active member.
 
 ### Document
 A file's **metadata** record (name, type, size, chunk count, integrity hash). The actual bytes
-live as encrypted chunks in MinIO — never in this row. Types include FIR, CHARGE_SHEET,
-FORENSIC_REPORT, WITNESS_STATEMENT, etc.
+live as encrypted chunks in the chunk store (local disk in prototype, MinIO in production) —
+never in this row. Types include FIR, CHARGE_SHEET, FORENSIC_REPORT, WITNESS_STATEMENT, etc.
 📁 `models/document.py`.
 
 ### Document chunk
-One encrypted 1 MB piece of a document. Stores its MinIO key, IV, and ciphertext hash — enough
-to fetch, verify, and decrypt it, but not the key itself.
+One encrypted 1 MB piece of a document. Stores its `storage_key` (local file path in prototype /
+MinIO object key in production), IV, and ciphertext hash — enough to fetch, verify, and decrypt
+it, but not the master key itself.
 📁 `models/document_chunk.py`.
 
 ### Audit event

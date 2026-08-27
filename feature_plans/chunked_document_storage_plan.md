@@ -6,12 +6,13 @@ This is the core technical innovation of the entire system. Instead of storing a
 
 1. Splits the document into fixed-size binary chunks (1 MB each)
 2. Encrypts each chunk independently with a unique derived key
-3. Stores each chunk as a separate object in MinIO (S3-compatible object storage)
-4. Stores only metadata (chunk index, IV, auth tag, hash, MinIO path) in PostgreSQL
-5. Stores the master document key in HashiCorp Vault (never in DB or MinIO)
-6. On retrieval: fetches all chunks, decrypts each, verifies integrity, and streams the reconstructed file
+3. Stores each chunk under an **opaque random key** (`secrets.token_hex(16)`) in the chunk store
+   (local disk in the prototype on Server B; MinIO in production)
+4. Stores only metadata (chunk index, opaque storage_key, IV, hash) in PostgreSQL — the storage_key has no structure that reveals document boundaries or ordering
+5. Stores the master document key in the local file KMS wrapped with KMS_WRAPPING_KEY (never in DB or chunk store)
+6. On retrieval: fetches all chunks by opaque key (ordering comes from DB chunk_index only), decrypts each, verifies integrity, and streams the reconstructed file
 
-**The result:** A compromised database gives an attacker only metadata. A compromised MinIO server gives an attacker only ciphertext. A compromised Vault gives an attacker only keys with no ciphertext. All three must be compromised simultaneously to access any document — and even then, the integrity check will detect tampering.
+**The result:** A compromised database gives only opaque chunk references — no content, no keys, no document structure from the filenames. A compromised chunk store (Server B) gives only flat, structureless ciphertext blobs. A compromised KMS gives only wrapped keys with no ciphertext. All three must be compromised simultaneously to access any document.
 
 ---
 
