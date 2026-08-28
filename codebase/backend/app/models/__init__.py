@@ -11,6 +11,7 @@ Tables:
     CaseMember          case_members       user<->case membership + per-case role
     Document            documents          document METADATA only (no content)
     DocumentChunk       document_chunks    per-chunk crypto metadata (ciphertext is in MinIO)
+    DocumentKey         document_keys      wrapped master key per document (AES-wrapped)
     AuditEvent          audit_events       append-only, hash-chained activity log
     DocumentSignature   document_signatures Ed25519 signatures on document integrity hash
     DocumentShareLink   document_share_links time-limited external share tokens (hashed)
@@ -22,6 +23,7 @@ from app.models.case import Case                        # noqa: F401
 from app.models.case_member import CaseMember           # noqa: F401
 from app.models.document import Document                # noqa: F401
 from app.models.document_chunk import DocumentChunk     # noqa: F401
+from app.models.document_key import DocumentKey          # noqa: F401
 from app.models.audit_event import AuditEvent           # noqa: F401
 from app.models.document_signature import DocumentSignature      # noqa: F401
 from app.models.document_share_link import DocumentShareLink     # noqa: F401
