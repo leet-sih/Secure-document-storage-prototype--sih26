@@ -185,3 +185,19 @@ Build plan (6 phases matching slide 4):
 - Embedding pipeline: text extraction → sentence-transformers → Qdrant
 - Semantic + BM25 hybrid search
 - Query never logged with results — privacy by design
+
+### R4 — Passkeys / WebAuthn (phishing-resistant auth)
+- **Additive to TOTP, not a replacement** — login offers TOTP *or* passkey; TOTP stays the baseline.
+- Biometrics (Face ID / Touch ID / Windows Hello / Android fingerprint) are just the local unlock
+  gate for a passkey — same WebAuthn tech, not a separate feature. Cross-device "Bluetooth" sign-in
+  is WebAuthn hybrid transport, handled by the OS/browser (no app code).
+- Backend: `webauthn` library; new `webauthn_credentials` table (credential id, public key,
+  sign count, transports, AAGUID); register + authenticate ceremony endpoints (challenge issue +
+  verify); RP-ID / secure-context (HTTPS) config.
+- Frontend: `navigator.credentials.create()` / `.get()`; enrol from Profile, offer at login.
+- **Admin recovery path is mandatory** — evidence handling means a lost passkey device must have an
+  admin reset/re-enrol flow (mirror the MFA-reset path), since a passkey may be the only factor.
+- Audit: reuse `MFA_ENABLED` / `MFA_VERIFIED` semantics or add `PASSKEY_REGISTERED` / `PASSKEY_VERIFIED`.
+- Deferred rationale: adds real complexity (ceremonies, attestation, browser/device dependence,
+  recovery) and demos less reliably than TOTP. Slot in post-prototype as `feature/auth-passkeys`.
+- See `feature_plans/specs/auth_totp_spec.md` (§Later) which already anticipates this.
