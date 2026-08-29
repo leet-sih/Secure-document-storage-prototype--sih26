@@ -1,0 +1,38 @@
+---
+description: Start every session from CLAUDE.md; one named feature branch and conventional commits
+alwaysApply: true
+---
+
+# Session start and git workflow (Doorva)
+
+## Start of every session
+
+Before implementing or changing files, read `CLAUDE.md` in the repo root. Follow its spec-before-code, design-first, security, and minimal-footprint rules. Feature plans in `feature_plans/` are the source of truth for behaviour.
+
+## Branches
+
+Never commit to `main`. One feature = one branch. Owner is Doorva.
+
+Name: `doorva/<type>/<area>-<short-description>`
+
+- `type`: `feature`, `fix`, `chore`, or `docs`
+- `area`: auth, users, cases, documents, audit, signatures, sharing, search, frontend, infra
+
+Examples:
+
+- `doorva/feature/auth-mfa`
+- `doorva/feature/frontend-case-detail`
+
+If the current branch does not match the feature being worked on: checkout `main`, pull, then create the correct branch **before** coding that feature. Do not mix unrelated features on one branch.
+
+## Commits
+
+Use conventional commits; message says why, not a file dump:
+
+```
+feat: add TOTP verification endpoint
+fix: keep MFA_REQUIRED from clearing the session
+docs: add auth MFA spec
+```
+
+Stage only files for that feature (`git add` specific paths, not a blind `.`). Do not commit until Doorva asks, unless they already asked to commit as part of finishing the feature.
