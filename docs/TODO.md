@@ -46,6 +46,9 @@ Build plan (6 phases matching slide 4):
 - [ ] [P1] Frontend: Step-up MFA prompt (modal, triggered on MFA_REQUIRED 401)
 - [ ] [P1] Frontend: User management page (admin)
 - [ ] [P1] Frontend: `AuthContext.tsx` + `apiFetch()` wired into App.tsx
+- [ ] [P1] User admin row actions: `PATCH /users/{id}` edit-role + deactivate — backend
+      `user_service.update_user`/`deactivate_user` still stubbed; the admin table currently
+      creates + lists only. Deferred from `feature_plans/specs/auth_frontend_wireup_spec.md`.
 
 ---
 

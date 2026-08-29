@@ -22,6 +22,46 @@ export interface CurrentUser {
   isFirstLogin: boolean;
 }
 
+export interface Department {
+  id: string;
+  name: string;
+  deptType: string;
+}
+
+/** A row in the User Admin table. */
+export interface AdminUser {
+  id: string;
+  email: string;
+  fullName: string;
+  employeeId: string | null;
+  role: Role;
+  departmentId: string;
+  isActive: boolean;
+  isFirstLogin: boolean;
+  mfaEnabled: boolean;
+  lastLoginAt: string | null;
+}
+
+/** Result of POST /auth/login, normalised for the LoginPage state machine. */
+export interface LoginResult {
+  /** Existing MFA user — a 6-digit TOTP step is required next. */
+  mfaRequired: boolean;
+  /** Brand-new / not-yet-enrolled user — session issued, must set up MFA. */
+  mfaSetupRequired: boolean;
+  /** Short-lived token to pass to verifyMfa(), present only when mfaRequired. */
+  tempToken?: string;
+}
+
+export interface MfaSetupResult {
+  otpauthUri: string;
+  qrCodeBase64: string;
+}
+
+export interface CreateUserResult {
+  user: AdminUser;
+  tempPassword: string;
+}
+
 export type CaseStatus = "OPEN" | "UNDER_INVESTIGATION" | "CLOSED" | "ARCHIVED";
 export type CasePriority = "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
 
