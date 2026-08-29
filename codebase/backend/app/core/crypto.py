@@ -70,3 +70,57 @@ def compute_integrity_hash(chunk_hashes_in_order: list[str]) -> str:
     """RETURNS: hex SHA-256 over the ordered concatenation of chunk hashes.
     This is Document.integrity_hash — re-checked on every download."""
     return hashlib.sha256("".join(chunk_hashes_in_order).encode()).hexdigest()
+
+
+# ──────────────────────────────────────────────────────────────────
+# Master-key wrapping (for the Postgres keystore — see core.kms)
+# ──────────────────────────────────────────────────────────────────
+# The document master key is stored WRAPPED (AES-256-GCM encrypted) under KMS_WRAPPING_KEY,
+# which is a separate env secret from SECRET_KEY/JWT_SECRET and NEVER lives in the DB.
+# See feature_plans/specs/document_encryption_keystore_spec.md.
+
+def _wrapping_key_bytes(wrapping_secret: str) -> bytes:
+    """Derive a fixed 32-byte AES key from the KMS_WRAPPING_KEY env secret.
+    The secret is already high-entropy (generated via secrets.token_urlsafe), so a plain
+    SHA-256 is sufficient to map an arbitrary-length string to a 256-bit key — no salt needed."""
+    return hashlib.sha256(wrapping_secret.encode()).digest()
+
+
+def wrap_master_key(wrapping_secret: str, master_key: bytes) -> tuple[bytes, bytes]:
+    """Wrap (encrypt) a document master key for at-rest storage in the DB keystore.
+    RETURNS: (iv, wrapped) where iv is 12 random bytes and wrapped is AES-256-GCM ciphertext
+    (32-byte key + 16-byte tag = 48 bytes). Wrapped under KMS_WRAPPING_KEY — NOT SECRET_KEY."""
+    iv = os.urandom(12)
+    wrapped = AESGCM(_wrapping_key_bytes(wrapping_secret)).encrypt(iv, master_key, None)
+    return iv, wrapped
+
+
+def unwrap_master_key(wrapping_secret: str, iv: bytes, wrapped: bytes) -> bytes:
+    """Reverse wrap_master_key. Raises cryptography.exceptions.InvalidTag if the wrapped key
+    or the wrapping secret is wrong. RETURNS: the 32-byte master key."""
+    return AESGCM(_wrapping_key_bytes(wrapping_secret)).decrypt(iv, wrapped, None)
+
+
+# ──────────────────────────────────────────────────────────────────
+# Small-secret wrapping (for TOTP seeds — see core.totp)
+# ──────────────────────────────────────────────────────────────────
+
+def _aes_key_from_secret(secret: str, info: bytes) -> bytes:
+    """HKDF-SHA256 → 32-byte AES key. `secret` is an app env string (e.g. SECRET_KEY)."""
+    hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=b"pramaan-aes", info=info)
+    return hkdf.derive(secret.encode("utf-8"))
+
+
+def encrypt_string(plaintext: str, wrapping_secret: str, info: bytes) -> str:
+    """AES-256-GCM wrap for small secrets (TOTP seed). RETURNS: hex(iv || ciphertext+tag)."""
+    key = _aes_key_from_secret(wrapping_secret, info)
+    iv, ciphertext = encrypt_chunk(key, plaintext.encode("utf-8"))
+    return (iv + ciphertext).hex()
+
+
+def decrypt_string(blob_hex: str, wrapping_secret: str, info: bytes) -> str:
+    """Reverse of encrypt_string. Raises InvalidTag if tampered."""
+    raw = bytes.fromhex(blob_hex)
+    iv, ciphertext = raw[:12], raw[12:]
+    key = _aes_key_from_secret(wrapping_secret, info)
+    return decrypt_chunk(key, iv, ciphertext).decode("utf-8")

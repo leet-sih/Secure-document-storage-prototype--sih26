@@ -8,20 +8,18 @@ If you get stuck, search the **Troubleshooting** section at the bottom before pi
 
 ## 0. What you are setting up
 
-A web app with three parts, all run together via Docker:
+A web app with three parts:
 
-- **backend/** — Flask API (Python 3.12)
+- **backend/** — Flask API (Python 3.12; 3.13/3.14 also work)
 - **frontend/** — React 18 + Vite (TypeScript)
-- **infra/** — PostgreSQL, Redis, MinIO, Vault, Nginx (all as containers)
+- **infra/** — PostgreSQL only (Docker). *Redis / MinIO / Vault / Nginx are deferred to
+  production — not part of the prototype; see `codebase/infra/README.md`.*
 
-You have **two ways** to run it:
+**How it runs:** PostgreSQL in a Docker container; the backend and frontend run **directly on
+your machine** with hot-reload. You need: Git + Docker Desktop + Python 3.12 + Node 20.
 
-| Path | Use when | Needs installed |
-|------|----------|-----------------|
-| **A. Docker-only** | You just want the whole system running | Git + Docker Desktop |
-| **B. Hybrid dev** | You are actively coding backend/frontend (hot reload) | Git + Docker + Python 3.12 + Node 20 |
-
-Most of you will use **Path B** for daily work. Do **Path A first** to confirm everything works.
+> **Scope note:** only the **auth** slice is runnable today — the migration creates `users`,
+> `departments`, `audit_events`. Case/document/search features aren't migrated yet.
 
 ---
 
@@ -38,7 +36,7 @@ Most of you will use **Path B** for daily work. Do **Path A first** to confirm e
 
 > **Windows only:** Docker Desktop needs **WSL2**. If Docker says WSL is missing, open PowerShell **as Administrator** and run `wsl --install`, then reboot.
 
-### 1.2 Extra tools if you use Path B (coding locally)
+### 1.2 Extra tools for running the app (backend + frontend run locally)
 
 | Tool | Why | Windows | macOS |
 |------|-----|---------|-------|
@@ -102,59 +100,51 @@ cd codebase
 cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
 ```
 
-Open `.env` and replace every `CHANGE_ME` with a value. For local dev you can use simple
-values (e.g. `devpassword`) **except** the two below — generate real random strings:
+Open `.env` and replace every `CHANGE_ME_generate_a_random_string`. For local dev you can keep
+the simple DB values (e.g. `devpassword`), but the **three secrets must be real, distinct random
+strings**: `SECRET_KEY`, `JWT_SECRET`, `KMS_WRAPPING_KEY` (they must all differ).
 
 ```bash
-# Generate a strong secret (run twice, paste into JWT_SECRET and SECRET_KEY)
+# Run three times; paste one each into SECRET_KEY, JWT_SECRET, KMS_WRAPPING_KEY
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
 > 🔴 **NEVER commit `.env` or paste real secrets in Slack/WhatsApp/GitHub.** If you ever do
 > by accident, tell the team immediately and rotate the value.
 
-For the demo, keep `KMS_BACKEND=env` (persistent). See `docs/EDGE_CASES.md` item 6.4 for why.
+`KMS_WRAPPING_KEY` wraps document master keys and is a **separate secret** from `SECRET_KEY`
+and `JWT_SECRET` — see `docs/SECURITY.md` "Key lifecycle".
 
 ---
 
-## 4. Path A — run everything with Docker (do this first)
+## 4. Start PostgreSQL (Docker)
 
-From the `codebase/` folder:
-
-```bash
-docker compose -f infra/docker-compose.yml up --build
-```
-
-First build takes a few minutes. When it settles:
-
-- Frontend: **https://localhost** (accept the self-signed certificate warning)
-- API health: **https://localhost/api/v1/health**
-- MinIO console: http://localhost:9001 (login = `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` from `.env`)
-
-Stop it with `Ctrl+C`, then `docker compose -f infra/docker-compose.yml down` to remove containers.
-
-> ⚠️ The code is still a scaffold — some endpoints return "not implemented" until we build them.
-> Path A is mainly to confirm your machine + Docker + `.env` are correct.
-
-**Generate the demo TLS cert** (once) so Nginx can start — see `codebase/infra/nginx/certs/README.md`.
-
----
-
-## 5. Path B — hybrid dev (infra in Docker, app local with hot reload)
-
-This is the day-to-day setup for coding. Run the databases in Docker, run backend + frontend
-directly so changes reload instantly.
-
-### 5.1 Start only the infra services
+Only PostgreSQL runs in Docker. From the `codebase/` folder, create a container whose
+credentials match `.env`:
 
 ```bash
-cd codebase
-docker compose -f infra/docker-compose.yml up postgres redis minio vault
+docker run -d --name pramaan-postgres \
+  -e POSTGRES_USER=dms_app_user -e POSTGRES_PASSWORD=devpassword -e POSTGRES_DB=dms \
+  -p 5432:5432 postgres:16
 ```
 
-Leave that terminal running. Open **two more** terminals for backend and frontend.
+PowerShell uses backtick (`` ` ``) line-continuations instead of `\`. Wait until it's ready:
 
-### 5.2 Backend
+```bash
+docker exec pramaan-postgres pg_isready -U dms_app_user -d dms   # -> "accepting connections"
+```
+
+> **If port 5432 is already in use** (`Bind for 0.0.0.0:5432 failed: port is already allocated`),
+> another Postgres is running. Don't kill it — map to **5433** instead
+> (`-p 5433:5432`) and change `DATABASE_URL` in `.env` to `...@localhost:5433/dms`.
+>
+> Alternative: `docker compose --env-file .env -f infra/docker-compose.yml up -d postgres`.
+
+## 5. Run the backend + frontend (locally, hot reload)
+
+Open **two terminals**.
+
+### 5.1 Backend
 
 ```bash
 cd codebase/backend
@@ -162,23 +152,23 @@ python -m venv .venv
 
 # Activate the virtual environment:
 #   Windows PowerShell:  .venv\Scripts\Activate.ps1
-#   Windows CMD:         .venv\Scripts\activate.bat
 #   macOS/Linux:         source .venv/bin/activate
 
 pip install -r requirements.txt
 
-# Point Flask at the app factory and load .env
-export FLASK_APP=wsgi:app          # Windows PowerShell: $env:FLASK_APP="wsgi:app"
-
-flask db upgrade                   # apply database migrations
-python seed.py                     # create demo users/cases (prints admin login once)
-flask run --debug                  # http://localhost:5000
+flask --app wsgi:app db upgrade    # creates users, departments, audit_events
+python seed.py                     # seeds ONE SUPER_ADMIN (prints the login)
+flask --app wsgi:app run --port 5000
 ```
 
-> If `.venv\Scripts\Activate.ps1` is blocked on Windows, run once:
-> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` then reopen the terminal.
+`seed.py` prints the only account — `admin@ncrb.gov.in / ChangeMe!2345` (SUPER_ADMIN). Every
+other user is created by that admin in-app. Sanity check: `curl http://localhost:5000/health`.
 
-### 5.3 Frontend
+> If `.venv\Scripts\Activate.ps1` is blocked on Windows, run once:
+> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then reopen the terminal. You can also
+> skip activation and call `.\.venv\Scripts\python.exe` / `...\flask.exe` directly.
+
+### 5.2 Frontend
 
 ```bash
 cd codebase/frontend
@@ -188,12 +178,31 @@ npm run dev        # http://localhost:5173  (proxies /api to the backend automat
 
 Open **http://localhost:5173**. Backend changes reload on save; frontend hot-reloads instantly.
 
+### 5.3 Walk through the auth flow
+
+Log in as `admin@ncrb.gov.in` / `ChangeMe!2345`:
+
+1. **Forced password change** (first login) — 12+ chars, upper + lower + digit + special.
+2. **Forced MFA setup** — scan the QR with an authenticator app (or type the manual key),
+   enter the 6-digit code → **Activate**. No phone?
+   `python -c "import pyotp; print(pyotp.TOTP('MANUAL_KEY').now())"`.
+3. **User Admin → Create User** — provision other users; each gets a one-time temp password
+   and runs the same change-password + MFA setup on first login.
+
+**Reset to a clean single-admin state anytime:**
+
+```bash
+docker exec pramaan-postgres psql -U dms_app_user -d dms \
+  -c "TRUNCATE TABLE audit_events, users, departments RESTART IDENTITY CASCADE;"
+python seed.py    # from codebase/backend, venv active
+```
+
 ### 5.4 Daily "start work" checklist
 
 ```
 1. git checkout main && git pull            # get latest
-2. docker compose -f infra/docker-compose.yml up postgres redis minio vault
-3. (backend terminal) activate venv -> flask db upgrade -> flask run --debug
+2. docker start pramaan-postgres            # (or the `docker run` in §4 the first time)
+3. (backend terminal) activate venv -> flask --app wsgi:app run --port 5000
 4. (frontend terminal) npm run dev
 5. git checkout -b feature/your-thing       # branch BEFORE coding (see section 6)
 ```
@@ -362,14 +371,17 @@ Fix issues locally so the PR is clean. Also re-read the **Checklist Before Every
 
 | Symptom | Fix |
 |---------|-----|
-| `docker: command not found` | Docker Desktop isn't installed/running. Start Docker Desktop and wait for it to say "running". |
+| `docker info` fails / daemon error | Start **Docker Desktop**, wait for "Engine running", retry. |
 | Docker error about WSL (Windows) | Run `wsl --install` in an Admin PowerShell, reboot. |
-| `port already in use` (5000/5173/5432) | Something else is using it. Stop it, or change the port. Find it: `netstat -ano | findstr :5432` (Windows). |
+| `port is already allocated` (5432) | Another Postgres is running. Use `-p 5433:5432` and set `DATABASE_URL` to `...@localhost:5433/dms` (see §4). |
+| Backend won't start, `KeyError: 'SECRET_KEY'` | `.env` missing or still has `CHANGE_ME`. Redo §3. |
+| `pip install` fails building a package | Prefer Python 3.12; recreate `.venv` with a 3.12 interpreter. |
 | `Activate.ps1 cannot be loaded` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, reopen terminal. |
-| `flask: command not found` | Your venv isn't activated, or deps not installed. Re-activate and `pip install -r requirements.txt`. |
-| Backend can't reach the DB | Are the infra containers up? `docker compose -f infra/docker-compose.yml ps`. Check `DATABASE_URL` host is `postgres` (Docker) or `localhost` (local). |
-| Browser: "connection not private" | Expected — self-signed cert. Click Advanced → Proceed. |
-| `.env` changes not taking effect | Restart the backend / `docker compose ... up` again. Env is read at startup. |
+| `flask: command not found` | venv not activated / deps missing. Re-activate and `pip install -r requirements.txt`. |
+| Backend can't reach the DB | Is the container up? `docker ps`. Check `DATABASE_URL` host/port matches the container (`localhost:5432` or `:5433`). |
+| Login 401 for a known-good user | That account's password was changed in-app. Reset the DB (§5.3) to restore `ChangeMe!2345`. |
+| `column "mfa_enabled" does not exist` in psql | It's a computed property, not a column. Query `totp_secret IS NULL` instead. |
+| `.env` changes not taking effect | Restart the backend. Env is read at startup. |
 | Merge conflict scares you | See 6.8, or ask. Nothing is broken until you commit. |
 | Accidentally committed `.env` | Tell the team NOW, rotate the secrets, and remove it: `git rm --cached codebase/.env` then commit. |
 
@@ -378,17 +390,17 @@ Fix issues locally so the PR is clean. Also re-read the **Checklist Before Every
 ## 10. Quick command reference
 
 ```bash
-# Run full stack (Docker)
-docker compose -f infra/docker-compose.yml up --build
-
-# Run only infra (for local dev)
-docker compose -f infra/docker-compose.yml up postgres redis minio vault
+# Database (Postgres only) — first time
+docker run -d --name pramaan-postgres \
+  -e POSTGRES_USER=dms_app_user -e POSTGRES_PASSWORD=devpassword -e POSTGRES_DB=dms \
+  -p 5432:5432 postgres:16
+docker start pramaan-postgres          # subsequent runs
 
 # Backend (from codebase/backend, venv active)
-flask db upgrade         # apply migrations
-flask db migrate -m "msg"# create a migration after model changes
-python seed.py           # demo data
-flask run --debug        # dev server
+flask --app wsgi:app db upgrade          # apply migrations
+flask --app wsgi:app db migrate -m "msg" # create a migration after model changes
+python seed.py                           # seed the SUPER_ADMIN
+flask --app wsgi:app run --port 5000     # dev server
 
 # Frontend (from codebase/frontend)
 npm install
