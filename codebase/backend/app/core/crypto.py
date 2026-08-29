@@ -70,3 +70,24 @@ def compute_integrity_hash(chunk_hashes_in_order: list[str]) -> str:
     """RETURNS: hex SHA-256 over the ordered concatenation of chunk hashes.
     This is Document.integrity_hash — re-checked on every download."""
     return hashlib.sha256("".join(chunk_hashes_in_order).encode()).hexdigest()
+
+
+def _aes_key_from_secret(secret: str, info: bytes) -> bytes:
+    """HKDF-SHA256 → 32-byte AES key. `secret` is an app env string (e.g. SECRET_KEY)."""
+    hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=b"pramaan-aes", info=info)
+    return hkdf.derive(secret.encode("utf-8"))
+
+
+def encrypt_string(plaintext: str, wrapping_secret: str, info: bytes) -> str:
+    """AES-256-GCM wrap for small secrets (TOTP seed). RETURNS: hex(iv || ciphertext+tag)."""
+    key = _aes_key_from_secret(wrapping_secret, info)
+    iv, ciphertext = encrypt_chunk(key, plaintext.encode("utf-8"))
+    return (iv + ciphertext).hex()
+
+
+def decrypt_string(blob_hex: str, wrapping_secret: str, info: bytes) -> str:
+    """Reverse of encrypt_string. Raises InvalidTag if tampered."""
+    raw = bytes.fromhex(blob_hex)
+    iv, ciphertext = raw[:12], raw[12:]
+    key = _aes_key_from_secret(wrapping_secret, info)
+    return decrypt_chunk(key, iv, ciphertext).decode("utf-8")

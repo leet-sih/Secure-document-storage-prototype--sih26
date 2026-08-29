@@ -67,6 +67,7 @@ class UserResponseSchema(Schema):
     role = fields.Str(dump_only=True)
     department_id = fields.UUID(dump_only=True)
     is_active = fields.Bool(dump_only=True)
+    is_first_login = fields.Bool(dump_only=True)
     mfa_enabled = fields.Bool(dump_only=True)
     last_login_at = fields.DateTime(dump_only=True)
     # NEVER dump: password_hash, totp_secret, signing keys

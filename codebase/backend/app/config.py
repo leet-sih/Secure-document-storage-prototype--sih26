@@ -22,6 +22,14 @@ EXPORTS:
 """
 
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+_backend_dir = Path(__file__).resolve().parents[1]
+_codebase_dir = Path(__file__).resolve().parents[2]
+load_dotenv(_backend_dir / ".env")
+load_dotenv(_codebase_dir / ".env")
 
 
 class Config:
