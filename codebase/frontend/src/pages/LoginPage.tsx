@@ -120,8 +120,10 @@ export default function LoginPage() {
             </label>
             <input
               id="lg-email"
+              name="email"
               type="email"
               autoComplete="username"
+              autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={input}
@@ -133,6 +135,7 @@ export default function LoginPage() {
             </label>
             <input
               id="lg-pw"
+              name="password"
               type="password"
               autoComplete="current-password"
               placeholder="••••••••••••"
@@ -157,7 +160,10 @@ export default function LoginPage() {
             Enter the 6-digit code from your authenticator app.
           </div>
           <input
+            name="otp"
             inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
             maxLength={6}
             placeholder="––––––"
             value={otp}

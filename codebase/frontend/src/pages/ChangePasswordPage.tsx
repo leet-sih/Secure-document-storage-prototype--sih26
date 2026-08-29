@@ -97,9 +97,20 @@ export default function ChangePasswordPage() {
           )}
         </div>
 
+        {/* Hidden username so password managers associate the new password with this
+            account and offer to save/update it. */}
+        <input
+          type="text"
+          name="username"
+          autoComplete="username"
+          value={user?.email ?? ""}
+          readOnly
+          hidden
+        />
         <Field id="cp-cur" text="Current password">
           <input
             id="cp-cur"
+            name="current-password"
             type="password"
             autoComplete="current-password"
             value={current}
@@ -110,6 +121,7 @@ export default function ChangePasswordPage() {
         <Field id="cp-new" text="New password">
           <input
             id="cp-new"
+            name="new-password"
             type="password"
             autoComplete="new-password"
             value={next}
@@ -120,6 +132,7 @@ export default function ChangePasswordPage() {
         <Field id="cp-cf" text="Confirm new password">
           <input
             id="cp-cf"
+            name="confirm-password"
             type="password"
             autoComplete="new-password"
             value={confirm}

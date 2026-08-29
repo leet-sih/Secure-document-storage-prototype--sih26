@@ -11,13 +11,13 @@ from app.extensions import db
 from app.models.department import Department
 from app.models.user import User
 
-DEMO_EMAIL = "officer@ncrb.gov.in"
-DEMO_PASSWORD = "ChangeMe!2345"
-
-# SUPER_ADMIN so the admin-only "Create User" flow is reachable out of the box.
+# The ONLY seeded account is a single SUPER_ADMIN (the bootstrap admin).
+# Every other user is provisioned by this admin via the "Create User" flow.
 ADMIN_EMAIL = "admin@ncrb.gov.in"
 ADMIN_PASSWORD = "ChangeMe!2345"
 
+# Departments are seeded because the create-user form needs one to assign, and there
+# is no department-management UI yet.
 DEPARTMENTS = [
     ("Cybercrime Unit", "POLICE"),
     ("Sessions Court", "COURT"),
@@ -53,17 +53,13 @@ def run() -> None:
     depts = {name: _ensure_department(name, dtype) for name, dtype in DEPARTMENTS}
 
     _ensure_user(
-        ADMIN_EMAIL, ADMIN_PASSWORD, "Demo Super Admin", "NCRB-ADMIN-001",
+        ADMIN_EMAIL, ADMIN_PASSWORD, "System Administrator", "NCRB-ADMIN-001",
         "SUPER_ADMIN", depts["Cybercrime Unit"],
     )
-    _ensure_user(
-        DEMO_EMAIL, DEMO_PASSWORD, "Demo Case Officer", "NCRB-DEMO-001",
-        "CASE_OFFICER", depts["Cybercrime Unit"],
-    )
     db.session.commit()
-    print(f"Admin login: {ADMIN_EMAIL} / {ADMIN_PASSWORD} (SUPER_ADMIN — can create users)")
-    print(f"Demo login:  {DEMO_EMAIL} / {DEMO_PASSWORD} (CASE_OFFICER)")
-    print("Both require password change + TOTP setup on first login.")
+    print(f"Admin login: {ADMIN_EMAIL} / {ADMIN_PASSWORD} (SUPER_ADMIN)")
+    print("Requires password change + TOTP setup on first login.")
+    print("All other users are created by the admin via User Admin -> Create User.")
 
 
 if __name__ == "__main__":

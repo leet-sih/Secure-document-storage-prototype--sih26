@@ -162,7 +162,9 @@ export default function MfaSetupPage() {
             Step 2 — Enter the 6-digit code to confirm setup
           </div>
           <input
+            name="otp"
             inputMode="numeric"
+            autoComplete="one-time-code"
             maxLength={6}
             placeholder="––––––"
             value={code}
