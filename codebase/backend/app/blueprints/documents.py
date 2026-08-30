@@ -1,29 +1,74 @@
 """
 documents.py — upload / list / download / preview / delete. Prefix: /api/v1
 
-ROUTES:
-    POST /cases/{case_id}/documents   [SUPER_ADMIN, CASE_OFFICER]  multipart upload (rate-limited)
-        Streams the `file` part into document_service.upload_document. Blocks if case
-        is CLOSED/ARCHIVED. Records DOCUMENT_UPLOADED.
-    GET  /cases/{case_id}/documents   [members]  list metadata (no content)
-    GET  /documents/{id}/download     [members]  pre-verify all chunks -> stream plaintext;
-        Content-Disposition: attachment. IntegrityError -> 422 + INTEGRITY_VIOLATION.
-        Records DOCUMENT_DOWNLOADED.
-    GET  /documents/{id}/preview      [members]  server-rendered PDF/image preview (P1)
-    DELETE /documents/{id}            [SUPER_ADMIN, CASE_OFFICER]  soft delete; DOCUMENT_DELETED
-    PATCH /documents/{id}             [CASE_OFFICER]  title/tags
-
-Stream uploads via request.stream — never request.get_data() (would buffer 500 MB in RAM).
+This branch implements POST /cases/{case_id}/documents only.
 See chunked_document_storage_plan.md + docs/EDGE_CASES.md sections 1 & 5.
 """
 
-from flask import Blueprint
+from flask import Blueprint, request
+from flask_jwt_extended import get_jwt_identity, jwt_required
+from marshmallow import ValidationError
+from flask_limiter.util import get_remote_address
+
+from app.core.audit_events import AuditEventType
+from app.core.errors import APIError, error_response
+from app.core.rate_limit import UPLOAD_LIMITS
+from app.core.rbac import Role, require_roles
+from app.extensions import limiter
+from app.schemas.document_schemas import DocumentMetadataSchema, DocumentUploadSchema
+from app.services import document_service
+from app.services.audit_service import audit_service
 
 documents_bp = Blueprint("documents", __name__)
 
-# TODO: implement routes.
-# from app.core.rbac import require_roles, Role
-# from app.extensions import limiter
-# from app.core.rate_limit import UPLOAD_LIMITS
-# from app.schemas.document_schemas import DocumentUploadSchema, DocumentPatchSchema, DocumentMetadataSchema
-# from app.services import document_service, case_service
+
+@documents_bp.route("/cases/<case_id>/documents", methods=["POST"])
+@jwt_required()
+@require_roles(Role.SUPER_ADMIN, Role.CASE_OFFICER)
+@limiter.limit(
+    UPLOAD_LIMITS,
+    key_func=lambda: str(get_jwt_identity() or get_remote_address()),
+)
+def upload_case_document(case_id, current_user):
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return error_response(400, "VALIDATION_ERROR", "file is required")
+
+    payload: dict = {
+        "doc_type": request.form.get("doc_type"),
+        "tags": request.form.getlist("tags"),
+    }
+    if request.form.get("title"):
+        payload["title"] = request.form.get("title")
+    try:
+        form = DocumentUploadSchema().load(payload)
+    except ValidationError as exc:
+        return error_response(400, "VALIDATION_ERROR", str(exc.messages))
+
+    try:
+        document = document_service.upload_document(
+            case_id=case_id,
+            file_stream=file.stream,
+            filename=file.filename,
+            mime_type=file.mimetype,
+            doc_type=form["doc_type"],
+            uploader_id=current_user.id,
+            title=form.get("title"),
+            tags=form.get("tags") or [],
+        )
+    except APIError as exc:
+        return error_response(exc.status, exc.code, exc.message)
+
+    audit_service.record(
+        AuditEventType.DOCUMENT_UPLOADED.value,
+        actor_user_id=current_user.id,
+        target_type="document",
+        target_id=document.id,
+        case_id=case_id,
+        metadata={
+            "filename": document.filename,
+            "size_bytes": document.file_size_bytes,
+            "chunks": document.total_chunks,
+        },
+    )
+    return DocumentMetadataSchema().dump(document), 201

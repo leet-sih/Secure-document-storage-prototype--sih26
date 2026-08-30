@@ -70,3 +70,36 @@ def compute_integrity_hash(chunk_hashes_in_order: list[str]) -> str:
     """RETURNS: hex SHA-256 over the ordered concatenation of chunk hashes.
     This is Document.integrity_hash — re-checked on every download."""
     return hashlib.sha256("".join(chunk_hashes_in_order).encode()).hexdigest()
+
+
+def normalize_wrapping_key(raw: str | bytes) -> bytes:
+    """Turn KMS_WRAPPING_KEY into a 32-byte AES key. Never use SECRET_KEY here."""
+    if isinstance(raw, bytes):
+        if len(raw) == 32:
+            return raw
+        raw = raw.decode("utf-8")
+    stripped = raw.strip()
+    if len(stripped) == 64:
+        try:
+            key = bytes.fromhex(stripped)
+            if len(key) == 32:
+                return key
+        except ValueError:
+            pass
+    encoded = stripped.encode("utf-8")
+    if len(encoded) == 32:
+        return encoded
+    return hashlib.sha256(encoded).digest()
+
+
+def wrap_key(wrapping_key: bytes, plaintext_key: bytes) -> bytes:
+    """AES-256-GCM wrap a document master key. RETURNS: iv (12) || ciphertext+tag."""
+    iv = os.urandom(12)
+    ciphertext = AESGCM(wrapping_key).encrypt(iv, plaintext_key, None)
+    return iv + ciphertext
+
+
+def unwrap_key(wrapping_key: bytes, blob: bytes) -> bytes:
+    """Reverse wrap_key. Raises InvalidTag if the file was modified."""
+    iv, ciphertext = blob[:12], blob[12:]
+    return AESGCM(wrapping_key).decrypt(iv, ciphertext, None)

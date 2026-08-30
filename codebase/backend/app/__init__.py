@@ -42,11 +42,18 @@ def _init_extensions(app: Flask) -> None:
     """Bind extension singletons to this app.
     TODO: cors.init_app(app, origins=app.config["CORS_ORIGINS"]).
     Also ensure the local storage dirs exist (CHUNK_STORAGE_DIR, KMS_DIR)."""
+    import importlib
+    import os
+
+    importlib.import_module("app.models")
+
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
     limiter.init_app(app)   # in-memory storage (prototype)
     cors.init_app(app)      # TODO: origins=app.config["CORS_ORIGINS"]
+    os.makedirs(app.config["KMS_DIR"], exist_ok=True)
+    os.makedirs(app.config["CHUNK_STORAGE_DIR"], exist_ok=True)
 
 
 def _register_blueprints(app: Flask) -> None:
@@ -58,7 +65,9 @@ def _register_blueprints(app: Flask) -> None:
         ... users, cases, documents, audit, signatures, sharing, search ...
         # share_access is PUBLIC: url_prefix="/api/v1/share"
     """
-    pass
+    from app.blueprints.documents import documents_bp
+
+    app.register_blueprint(documents_bp, url_prefix="/api/v1")
 
 
 def _register_error_handlers(app: Flask) -> None:

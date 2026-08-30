@@ -31,25 +31,42 @@ Key lifecycle: see docs/SECURITY.md "Key lifecycle".
 Reference: feature_plans/chunked_document_storage_plan.md
 """
 
-# Implementation notes for whoever builds this (small + straightforward):
-#   store_key: encrypt `key` with KMS_WRAPPING_KEY (AESGCM), write to KMS_DIR/{document_id}.key
-#   get_key:   read + decrypt that file using KMS_WRAPPING_KEY
-#   delete_key: os.remove the file (ignore if missing)
-#
-# Use current_app.config["KMS_WRAPPING_KEY"] — NOT config["SECRET_KEY"].
+from pathlib import Path
+
+from flask import current_app
+
+from app.core.crypto import normalize_wrapping_key, unwrap_key, wrap_key
+
+
+def _wrapping_key() -> bytes:
+    return normalize_wrapping_key(current_app.config["KMS_WRAPPING_KEY"])
+
+
+def _key_path(document_id: str) -> Path:
+    return Path(current_app.config["KMS_DIR"]) / f"{document_id}.key"
 
 
 def store_key(document_id: str, key: bytes) -> None:
     """Persist a document's master key (AES-wrapped with KMS_WRAPPING_KEY) to
-    KMS_DIR/{document_id}.key. TODO."""
-    raise NotImplementedError
+    KMS_DIR/{document_id}.key."""
+    path = _key_path(document_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    blob = wrap_key(_wrapping_key(), key)
+    path.write_bytes(blob)
 
 
 def get_key(document_id: str) -> bytes:
-    """Return the master key for document_id. Raises FileNotFoundError if missing. TODO."""
-    raise NotImplementedError
+    """Return the master key for document_id. Raises FileNotFoundError if missing."""
+    path = _key_path(document_id)
+    if not path.is_file():
+        raise FileNotFoundError(document_id)
+    return unwrap_key(_wrapping_key(), path.read_bytes())
 
 
 def delete_key(document_id: str) -> None:
-    """Remove the key file (on hard-delete / failed-upload cleanup). Idempotent. TODO."""
-    raise NotImplementedError
+    """Remove the key file (on hard-delete / failed-upload cleanup). Idempotent."""
+    path = _key_path(document_id)
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return

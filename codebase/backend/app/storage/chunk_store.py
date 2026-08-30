@@ -37,6 +37,9 @@ Reference: feature_plans/chunked_document_storage_plan.md + docs/EDGE_CASES.md �
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from flask import current_app
 
 
@@ -53,23 +56,36 @@ def _backend() -> str:
 # ──────────────────────────────────────────────────────────────────
 
 def _local_path(storage_key: str) -> str:
-    """Flat path: CHUNK_STORAGE_DIR/{storage_key}. TODO (read dir from config)."""
-    raise NotImplementedError
+    """Flat path: CHUNK_STORAGE_DIR/{storage_key}."""
+    if not storage_key or "/" in storage_key or "\\" in storage_key or ".." in storage_key:
+        raise ValueError("invalid storage_key")
+    return str(Path(current_app.config["CHUNK_STORAGE_DIR"]) / storage_key)
 
 
 def _put_local(storage_key: str, data: bytes) -> None:
-    """Write ciphertext to CHUNK_STORAGE_DIR/{storage_key}. TODO."""
-    raise NotImplementedError
+    """Write ciphertext to CHUNK_STORAGE_DIR/{storage_key}."""
+    path = Path(_local_path(storage_key))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
 
 
 def _get_local(storage_key: str) -> bytes:
-    """Read ciphertext from CHUNK_STORAGE_DIR/{storage_key}. TODO."""
-    raise NotImplementedError
+    """Read ciphertext from CHUNK_STORAGE_DIR/{storage_key}."""
+    path = Path(_local_path(storage_key))
+    if not path.is_file():
+        raise FileNotFoundError(storage_key)
+    return path.read_bytes()
 
 
 def _delete_local(storage_keys: list[str]) -> None:
-    """Delete each file at CHUNK_STORAGE_DIR/{key}. Idempotent. TODO."""
-    raise NotImplementedError
+    """Delete each file at CHUNK_STORAGE_DIR/{key}. Idempotent."""
+    for key in storage_keys:
+        try:
+            os.unlink(_local_path(key))
+        except FileNotFoundError:
+            continue
+        except ValueError:
+            continue
 
 
 # ──────────────────────────────────────────────────────────────────
