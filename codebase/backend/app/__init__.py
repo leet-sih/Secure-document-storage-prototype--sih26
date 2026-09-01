@@ -43,6 +43,7 @@ def _init_extensions(app: Flask) -> None:
 
 
 def _register_blueprints(app: Flask) -> None:
+    from app.blueprints.audit import audit_bp
     from app.blueprints.auth import auth_bp
     from app.blueprints.cases import cases_bp
     from app.blueprints.documents import documents_bp
@@ -52,6 +53,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(users_bp, url_prefix="/api/v1/users")
     app.register_blueprint(cases_bp, url_prefix="/api/v1/cases")
     app.register_blueprint(documents_bp, url_prefix="/api/v1")
+    app.register_blueprint(audit_bp, url_prefix="/api/v1/audit")
 
 
 def _configure_logging(app: Flask) -> None:
