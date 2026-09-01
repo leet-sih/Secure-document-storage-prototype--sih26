@@ -49,11 +49,13 @@ const initialState: AuthState = {
 
 type AuthAction =
   | { type: "SET_SESSION"; user: CurrentUser }
+  | { type: "SET_USER"; user: CurrentUser }
   | { type: "CLEAR" };
 
 function authReducer(state: AuthState, action: AuthAction): AuthState {
   switch (action.type) {
     case "SET_SESSION":
+    case "SET_USER":
       return { user: action.user, status: "authed" };
     case "CLEAR":
       return { user: null, status: "anon" };
@@ -66,6 +68,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
 
 interface AuthContextValue extends AuthState {
   setSession: (accessToken: string, user: CurrentUser) => void;
+  setUser: (user: CurrentUser) => void;
   clear: () => void;
 }
 
@@ -81,13 +84,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_SESSION", user });
   }
 
+  function setUser(user: CurrentUser) {
+    dispatch({ type: "SET_USER", user });
+  }
+
   function clear() {
     localStorage.removeItem(TOKEN_KEY);
     dispatch({ type: "CLEAR" });
   }
 
   return (
-    <AuthContext.Provider value={{ ...state, setSession, clear }}>
+    <AuthContext.Provider value={{ ...state, setSession, setUser, clear }}>
       {children}
     </AuthContext.Provider>
   );

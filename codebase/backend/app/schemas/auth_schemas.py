@@ -29,3 +29,7 @@ class MFAVerifySchema(_Base):
 
 class MFAConfirmSchema(_Base):
     totp_code = fields.Str(required=True, validate=validate.Regexp(r"^\d{6}$"))
+
+
+class MFAStepUpSchema(_Base):
+    totp_code = fields.Str(required=True, validate=validate.Regexp(r"^\d{6}$"))

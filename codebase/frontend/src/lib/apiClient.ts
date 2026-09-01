@@ -29,6 +29,21 @@
 const TOKEN_KEY = "dms_access_token";
 const BASE = "/api/v1";
 
+/**
+ * Thrown for every non-2xx response. Carries the API error envelope's `code` so callers
+ * can branch (e.g. "MFA_REQUIRED" → step-up, "UNAUTHORIZED" on login → show message).
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<unknown> {
   const token = localStorage.getItem(TOKEN_KEY);
 
@@ -43,17 +58,21 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<un
     },
   });
 
-  if (res.status === 401) {
-    // TODO: inspect res.json().code — if "MFA_REQUIRED", redirect to step-up, not login.
+  if (res.ok) return res.status === 204 ? null : res.json();
+
+  const body = (await res.json().catch(() => ({}))) as {
+    error?: { code?: string; message?: string };
+  };
+  const code = body.error?.code ?? "ERROR";
+  const message = body.error?.message ?? res.statusText;
+
+  // Session expiry: a 401 on an authenticated endpoint means the token is stale — clear it
+  // and bounce to /login. Do NOT do this for /auth/* (bad-credentials during login is a 401
+  // too, and must not trigger a redirect loop) nor for MFA_REQUIRED (caller opens step-up).
+  if (res.status === 401 && code !== "MFA_REQUIRED" && !path.startsWith("/auth/")) {
     localStorage.removeItem(TOKEN_KEY);
     if (location.pathname !== "/login") location.assign("/login");
-    throw new Error("unauthorised");
   }
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { error?: { message?: string } })?.error?.message ?? res.statusText);
-  }
-
-  return res.status === 204 ? null : res.json();
+  throw new ApiError(res.status, code, message);
 }

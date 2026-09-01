@@ -28,14 +28,17 @@ All frontend UI must match the approved prototype. Design files live at `design/
 |------|---------|
 | `design/PRAMAAN Prototype.dc.html` | Full clickable prototype — every screen, all states, exact layout, colours, spacing |
 | `design/support.js` | dc-runtime that drives the prototype (do not modify) |
-| `design/github.md` | **Screen → repo file map** — read this first to know which page/component file corresponds to each design screen |
+| `design/github.md` | **Screen → repo file map** — read this first; also lists the per-screen JSX reference files |
+| `design/screens/*.jsx` | **Per-screen JSX reference files** — one file per page/component, already translated from the HTML |
+| `design/screens/tokens.js` | Design tokens, color constants, icon map, role/status color maps |
 
 ### How agents must use the design files
 
-1. **Before implementing any frontend page or component**, read `design/github.md` to find the matching design screen.
-2. **Read the relevant section of `design/PRAMAAN Prototype.dc.html`** to extract exact colours, font sizes, spacing, component structure, and interactive states for that screen.
-3. **Translate the design into React/TypeScript** — same layout, same tokens, but replace all mock/local state with real `apiFetch()` calls to the Flask backend. Delete prototype-only controls (e.g. "PROTOTYPE STATES" buttons).
-4. **Do not invent UI** not in the design. If a state or element is missing from the prototype, flag it in the spec rather than guessing.
+1. **Before implementing any frontend page or component**, read `design/github.md` to find the matching design screen and its JSX reference file.
+2. **Read `design/screens/<ScreenName>.jsx`** — this is the pre-extracted JSX for that screen with exact colours, spacing, and component structure. Do not read the full HTML unless a detail is missing from the JSX file.
+3. **Translate the design into React/TypeScript** — same layout, same tokens, but replace all mock props and static data with real `apiFetch()` calls to the Flask backend. Delete prototype-only controls (already removed from the JSX files).
+4. **Import design tokens** from `design/screens/tokens.js` for reference — do not copy the token values manually; verify against the source.
+5. **Do not invent UI** not in the design. If a state or element is missing from the JSX file, check the HTML prototype before guessing.
 
 ### Design tokens (apply exactly — no deviations)
 | Token | Value |
@@ -180,7 +183,30 @@ codebase/
 design/                      # UI prototype (sibling of codebase/, not inside it)
 ├── PRAMAAN Prototype.dc.html  # full clickable prototype — source of truth for all UI
 ├── support.js                 # dc-runtime (do not modify)
-└── github.md                  # screen → repo file map
+├── github.md                  # screen → repo file map + JSX reference file index
+└── screens/                   # per-screen JSX reference files (read these, not the HTML)
+    ├── tokens.js              # design tokens, colors, icon/role/status maps
+    ├── LoginPage.jsx
+    ├── MfaSetupPage.jsx
+    ├── ShareAccessPage.jsx
+    ├── AppShell.jsx
+    ├── DashboardPage.jsx
+    ├── CaseDetailPage.jsx
+    ├── DocumentsTab.jsx
+    ├── ActivityTab.jsx
+    ├── MembersTab.jsx
+    ├── OverviewTab.jsx
+    ├── DocumentDetailPanel.jsx
+    ├── SearchPage.jsx
+    ├── AuditPage.jsx
+    ├── UserAdminPage.jsx
+    ├── ProfilePage.jsx
+    ├── StepUpMfaModal.jsx
+    ├── ShareModal.jsx
+    ├── CreateCaseModal.jsx
+    ├── CreateUserModal.jsx
+    ├── EditRoleModal.jsx
+    └── ConfirmModal.jsx
 ```
 
 ## Roles in the System (RBAC)

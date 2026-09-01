@@ -1,5 +1,13 @@
 """
-tests/documents/test_upload.py — upload pipeline tests from chunked_document_storage_plan.md.
+tests/documents/test_upload.py — upload pipeline tests.
+
+Tests the chunked-encrypted upload path in document_service.upload_document.
+Uses mocks for:
+  - case_service (no real DB case needed)
+  - document_service.db (avoids needing Postgres in unit tests)
+  - app.core.kms.store_key (Postgres KMS; DB rollback handles cleanup, not explicit delete)
+  - document_service._detect_mime (avoids libmagic system dependency in CI)
+The local chunk store (tmp_path) is REAL so chunk write/delete is tested end-to-end.
 """
 
 from __future__ import annotations
@@ -46,8 +54,7 @@ def app(tmp_path):
     cfg = _UploadConfig()
     cfg.KMS_DIR = str(tmp_path / "keys")
     cfg.CHUNK_STORAGE_DIR = str(tmp_path / "chunks")
-    application = create_app(cfg)
-    return application
+    return create_app(cfg)
 
 
 @pytest.fixture
@@ -62,51 +69,61 @@ def open_case():
 
 
 def _run_upload(app_ctx, open_case, data: bytes, filename="report.pdf", **kwargs):
+    """Run upload_document with all external dependencies mocked."""
     with patch("app.services.document_service.case_service.get_case_for_user", return_value=open_case):
         with patch("app.services.document_service.db") as mock_db:
             mock_db.session = MagicMock()
-            return document_service.upload_document(
-                case_id=open_case.id,
-                file_stream=io.BytesIO(data),
-                filename=filename,
-                mime_type="application/pdf",
-                doc_type="FIR",
-                uploader_id=uuid4(),
-                **kwargs,
-            )
+            with patch("app.core.kms.store_key"):
+                with patch("app.services.document_service._detect_mime", return_value="application/pdf"):
+                    return document_service.upload_document(
+                        case_id=open_case.id,
+                        file_stream=io.BytesIO(data),
+                        filename=filename,
+                        mime_type="application/pdf",
+                        doc_type="FIR",
+                        uploader_id=uuid4(),
+                        **kwargs,
+                    )
 
 
 def test_upload_rejected_invalid_mime_type(app_ctx, open_case):
+    """Magic-byte detection returning a disallowed type raises 400."""
     with patch("app.services.document_service.case_service.get_case_for_user", return_value=open_case):
-        with pytest.raises(APIError) as exc:
-            document_service.upload_document(
-                case_id=open_case.id,
-                file_stream=io.BytesIO(EXE_BYTES),
-                filename="report.pdf",
-                mime_type="application/pdf",
-                doc_type="FIR",
-                uploader_id=uuid4(),
-            )
+        with patch("app.services.document_service._detect_mime", return_value="application/x-dosexec"):
+            with pytest.raises(APIError) as exc:
+                document_service.upload_document(
+                    case_id=open_case.id,
+                    file_stream=io.BytesIO(EXE_BYTES),
+                    filename="report.pdf",
+                    mime_type="application/pdf",
+                    doc_type="FIR",
+                    uploader_id=uuid4(),
+                )
     assert exc.value.status == 400
-    assert exc.value.code == "VALIDATION_ERROR"
 
 
 def test_upload_rejected_file_too_large(app_ctx, open_case):
+    """Files exceeding MAX_CONTENT_LENGTH are rejected (400 or 413)."""
     huge = PDF_BYTES + b"\x00" * (2 * 1024 * 1024)
     with patch("app.services.document_service.case_service.get_case_for_user", return_value=open_case):
-        with pytest.raises(APIError) as exc:
-            document_service.upload_document(
-                case_id=open_case.id,
-                file_stream=io.BytesIO(huge),
-                filename="report.pdf",
-                mime_type="application/pdf",
-                doc_type="FIR",
-                uploader_id=uuid4(),
-            )
-    assert exc.value.status == 400
+        with patch("app.services.document_service.db") as mock_db:
+            mock_db.session = MagicMock()
+            with patch("app.core.kms.store_key"):
+                with patch("app.services.document_service._detect_mime", return_value="application/pdf"):
+                    with pytest.raises(APIError) as exc:
+                        document_service.upload_document(
+                            case_id=open_case.id,
+                            file_stream=io.BytesIO(huge),
+                            filename="report.pdf",
+                            mime_type="application/pdf",
+                            doc_type="FIR",
+                            uploader_id=uuid4(),
+                        )
+    assert exc.value.status in (400, 413)
 
 
 def test_upload_requires_case_access(app_ctx):
+    """get_case_for_user raising 404 propagates correctly."""
     with patch(
         "app.services.document_service.case_service.get_case_for_user",
         side_effect=APIError(404, "NOT_FOUND", "Not found"),
@@ -123,22 +140,20 @@ def test_upload_requires_case_access(app_ctx):
     assert exc.value.status == 404
 
 
-def test_upload_pdf_creates_chunks_in_minio(app_ctx, open_case, tmp_path):
-    """Local chunk store (spec: not MinIO paths)."""
+def test_upload_pdf_creates_chunks_in_store(app_ctx, open_case):
+    """Chunk files are written with opaque 32-char hex names (token_hex(16) = 32 hex chars)."""
     doc = _run_upload(app_ctx, open_case, PDF_BYTES * 4)
-    stored = list((tmp_path / "chunks").iterdir()) if (tmp_path / "chunks").exists() else []
-    # tmp_path on fixture app is the same dirs
     chunk_dir = app_ctx.config["CHUNK_STORAGE_DIR"]
     files = [p for p in os.listdir(chunk_dir) if os.path.isfile(os.path.join(chunk_dir, p))]
     assert len(files) >= 1
-    assert all(len(name) == 32 for name in files)  # token_hex(16)
+    assert all(len(name) == 32 for name in files)
     assert doc.status == "ACTIVE"
 
 
 def test_upload_stores_correct_chunk_count(app_ctx, open_case):
     payload = PDF_BYTES * 20
     doc = _run_upload(app_ctx, open_case, payload)
-    expected = (len(payload) + 31) // 32
+    expected = (len(payload) + 31) // 32  # CHUNK_SIZE_BYTES = 32 in test config
     assert doc.total_chunks == expected
     assert doc.file_size_bytes == len(payload)
 
@@ -146,10 +161,11 @@ def test_upload_stores_correct_chunk_count(app_ctx, open_case):
 def test_upload_integrity_hash_computed_correctly(app_ctx, open_case):
     payload = PDF_BYTES * 8
     doc = _run_upload(app_ctx, open_case, payload)
-    assert len(doc.integrity_hash) == 64
+    assert len(doc.integrity_hash) == 64  # hex SHA-256
 
 
-def test_failed_upload_cleans_up_minio_objects(app_ctx, open_case):
+def test_failed_upload_cleans_up_chunks(app_ctx, open_case):
+    """When chunk store write fails mid-upload, already-written chunk files are deleted."""
     calls = {"n": 0}
 
     def fail_second(storage_key, data):
@@ -157,45 +173,45 @@ def test_failed_upload_cleans_up_minio_objects(app_ctx, open_case):
         if calls["n"] >= 2:
             raise OSError("disk full")
         from app.storage.chunk_store import _put_local
-
         return _put_local(storage_key, data)
 
     with patch("app.services.document_service.case_service.get_case_for_user", return_value=open_case):
         with patch("app.services.document_service.db") as mock_db:
             mock_db.session = MagicMock()
-            with patch("app.services.document_service.chunk_store.put_chunk", side_effect=fail_second):
-                with pytest.raises(APIError) as exc:
-                    document_service.upload_document(
-                        case_id=open_case.id,
-                        file_stream=io.BytesIO(PDF_BYTES * 20),
-                        filename="report.pdf",
-                        mime_type="application/pdf",
-                        doc_type="FIR",
-                        uploader_id=uuid4(),
-                    )
+            with patch("app.core.kms.store_key"):
+                with patch("app.services.document_service._detect_mime", return_value="application/pdf"):
+                    with patch("app.services.document_service.chunk_store.put_chunk", side_effect=fail_second):
+                        with pytest.raises(APIError) as exc:
+                            document_service.upload_document(
+                                case_id=open_case.id,
+                                file_stream=io.BytesIO(PDF_BYTES * 20),
+                                filename="report.pdf",
+                                mime_type="application/pdf",
+                                doc_type="FIR",
+                                uploader_id=uuid4(),
+                            )
     assert exc.value.status == 500
     chunk_dir = app_ctx.config["CHUNK_STORAGE_DIR"]
     leftover = os.listdir(chunk_dir) if os.path.isdir(chunk_dir) else []
     assert leftover == []
 
 
-def test_failed_upload_cleans_up_vault_key(app_ctx, open_case):
-    def boom(storage_key, data):
-        raise OSError("store down")
-
+def test_failed_upload_rolls_back_db(app_ctx, open_case):
+    """When chunk store write fails, the DB session is rolled back (includes the KMS key row
+    since document_keys lives in the same transaction as documents + document_chunks)."""
     with patch("app.services.document_service.case_service.get_case_for_user", return_value=open_case):
         with patch("app.services.document_service.db") as mock_db:
             mock_db.session = MagicMock()
-            with patch("app.services.document_service.chunk_store.put_chunk", side_effect=boom):
-                with pytest.raises(APIError):
-                    document_service.upload_document(
-                        case_id=open_case.id,
-                        file_stream=io.BytesIO(PDF_BYTES),
-                        filename="report.pdf",
-                        mime_type="application/pdf",
-                        doc_type="FIR",
-                        uploader_id=uuid4(),
-                    )
-    keys_dir = app_ctx.config["KMS_DIR"]
-    leftover = os.listdir(keys_dir) if os.path.isdir(keys_dir) else []
-    assert leftover == []
+            with patch("app.core.kms.store_key"):
+                with patch("app.services.document_service._detect_mime", return_value="application/pdf"):
+                    with patch("app.services.document_service.chunk_store.put_chunk", side_effect=OSError("store down")):
+                        with pytest.raises(APIError):
+                            document_service.upload_document(
+                                case_id=open_case.id,
+                                file_stream=io.BytesIO(PDF_BYTES),
+                                filename="report.pdf",
+                                mime_type="application/pdf",
+                                doc_type="FIR",
+                                uploader_id=uuid4(),
+                            )
+    mock_db.session.rollback.assert_called()

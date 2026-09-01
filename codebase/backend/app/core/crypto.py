@@ -72,34 +72,55 @@ def compute_integrity_hash(chunk_hashes_in_order: list[str]) -> str:
     return hashlib.sha256("".join(chunk_hashes_in_order).encode()).hexdigest()
 
 
-def normalize_wrapping_key(raw: str | bytes) -> bytes:
-    """Turn KMS_WRAPPING_KEY into a 32-byte AES key. Never use SECRET_KEY here."""
-    if isinstance(raw, bytes):
-        if len(raw) == 32:
-            return raw
-        raw = raw.decode("utf-8")
-    stripped = raw.strip()
-    if len(stripped) == 64:
-        try:
-            key = bytes.fromhex(stripped)
-            if len(key) == 32:
-                return key
-        except ValueError:
-            pass
-    encoded = stripped.encode("utf-8")
-    if len(encoded) == 32:
-        return encoded
-    return hashlib.sha256(encoded).digest()
+# ──────────────────────────────────────────────────────────────────
+# Master-key wrapping (for the Postgres keystore — see core.kms)
+# ──────────────────────────────────────────────────────────────────
+# The document master key is stored WRAPPED (AES-256-GCM encrypted) under KMS_WRAPPING_KEY,
+# which is a separate env secret from SECRET_KEY/JWT_SECRET and NEVER lives in the DB.
+# See feature_plans/specs/document_encryption_keystore_spec.md.
+
+def _wrapping_key_bytes(wrapping_secret: str) -> bytes:
+    """Derive a fixed 32-byte AES key from the KMS_WRAPPING_KEY env secret.
+    The secret is already high-entropy (generated via secrets.token_urlsafe), so a plain
+    SHA-256 is sufficient to map an arbitrary-length string to a 256-bit key — no salt needed."""
+    return hashlib.sha256(wrapping_secret.encode()).digest()
 
 
-def wrap_key(wrapping_key: bytes, plaintext_key: bytes) -> bytes:
-    """AES-256-GCM wrap a document master key. RETURNS: iv (12) || ciphertext+tag."""
+def wrap_master_key(wrapping_secret: str, master_key: bytes) -> tuple[bytes, bytes]:
+    """Wrap (encrypt) a document master key for at-rest storage in the DB keystore.
+    RETURNS: (iv, wrapped) where iv is 12 random bytes and wrapped is AES-256-GCM ciphertext
+    (32-byte key + 16-byte tag = 48 bytes). Wrapped under KMS_WRAPPING_KEY — NOT SECRET_KEY."""
     iv = os.urandom(12)
-    ciphertext = AESGCM(wrapping_key).encrypt(iv, plaintext_key, None)
-    return iv + ciphertext
+    wrapped = AESGCM(_wrapping_key_bytes(wrapping_secret)).encrypt(iv, master_key, None)
+    return iv, wrapped
 
 
-def unwrap_key(wrapping_key: bytes, blob: bytes) -> bytes:
-    """Reverse wrap_key. Raises InvalidTag if the file was modified."""
-    iv, ciphertext = blob[:12], blob[12:]
-    return AESGCM(wrapping_key).decrypt(iv, ciphertext, None)
+def unwrap_master_key(wrapping_secret: str, iv: bytes, wrapped: bytes) -> bytes:
+    """Reverse wrap_master_key. Raises cryptography.exceptions.InvalidTag if the wrapped key
+    or the wrapping secret is wrong. RETURNS: the 32-byte master key."""
+    return AESGCM(_wrapping_key_bytes(wrapping_secret)).decrypt(iv, wrapped, None)
+
+
+# ──────────────────────────────────────────────────────────────────
+# Small-secret wrapping (for TOTP seeds — see core.totp)
+# ──────────────────────────────────────────────────────────────────
+
+def _aes_key_from_secret(secret: str, info: bytes) -> bytes:
+    """HKDF-SHA256 → 32-byte AES key. `secret` is an app env string (e.g. SECRET_KEY)."""
+    hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=b"pramaan-aes", info=info)
+    return hkdf.derive(secret.encode("utf-8"))
+
+
+def encrypt_string(plaintext: str, wrapping_secret: str, info: bytes) -> str:
+    """AES-256-GCM wrap for small secrets (TOTP seed). RETURNS: hex(iv || ciphertext+tag)."""
+    key = _aes_key_from_secret(wrapping_secret, info)
+    iv, ciphertext = encrypt_chunk(key, plaintext.encode("utf-8"))
+    return (iv + ciphertext).hex()
+
+
+def decrypt_string(blob_hex: str, wrapping_secret: str, info: bytes) -> str:
+    """Reverse of encrypt_string. Raises InvalidTag if tampered."""
+    raw = bytes.fromhex(blob_hex)
+    iv, ciphertext = raw[:12], raw[12:]
+    key = _aes_key_from_secret(wrapping_secret, info)
+    return decrypt_chunk(key, iv, ciphertext).decode("utf-8")

@@ -34,6 +34,7 @@ class Case(db.Model):
     category = db.Column(db.Text)
 
     created_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
+    lead_officer_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"))
     department_id = db.Column(UUID(as_uuid=True), db.ForeignKey("departments.id"), nullable=False)
 
     closed_at = db.Column(db.DateTime(timezone=True))

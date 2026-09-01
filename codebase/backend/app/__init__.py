@@ -1,82 +1,81 @@
 """
 app/__init__.py — the Flask application factory.
-
-WHAT THIS FILE DOES:
-    create_app() builds and returns a fully-wired Flask app:
-      1. Loads config from environment (config.get_config()).
-      2. Binds extensions (db, migrate, jwt, limiter, cors) to the app.
-      3. Registers all blueprints (auth, users, cases, documents, audit,
-         signatures, sharing, share_access, search) under /api/v1.
-      4. Registers error handlers (uniform JSON error envelope).
-      5. Configures structured logging.
-
-USAGE:
-    from app import create_app
-    app = create_app()
-
-RETURNS:
-    A Flask app instance (used by wsgi.py and the test suite's `client` fixture).
-
-DO NOT create a global `app` here — always go through create_app() (see CLAUDE.md).
 """
+
+import logging
+import os
+from datetime import timedelta
 
 from flask import Flask
 
-from app.config import get_config
+from app.core.errors import register_error_handlers
 from app.extensions import db, migrate, jwt, limiter, cors
 
 
 def create_app(config_object=None) -> Flask:
+    from app.config import get_config
+
     app = Flask(__name__)
     app.config.from_object(config_object or get_config())
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(
+        seconds=int(app.config.get("JWT_ACCESS_TTL_SECONDS", 28800))
+    )
+    app.config["JWT_TOKEN_LOCATION"] = ["headers"]
 
     _init_extensions(app)
     _register_blueprints(app)
-    _register_error_handlers(app)
+    register_error_handlers(app)
     _configure_logging(app)
+    _register_health(app)
 
     return app
 
 
 def _init_extensions(app: Flask) -> None:
-    """Bind extension singletons to this app.
-    TODO: cors.init_app(app, origins=app.config["CORS_ORIGINS"]).
-    Also ensure the local storage dirs exist (CHUNK_STORAGE_DIR, KMS_DIR)."""
-    import importlib
-    import os
-
-    importlib.import_module("app.models")
-
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    limiter.init_app(app)   # in-memory storage (prototype)
-    cors.init_app(app)      # TODO: origins=app.config["CORS_ORIGINS"]
-    os.makedirs(app.config["KMS_DIR"], exist_ok=True)
-    os.makedirs(app.config["CHUNK_STORAGE_DIR"], exist_ok=True)
+    _register_jwt_callbacks()
+    limiter.init_app(app)
+    cors.init_app(app, origins=app.config.get("CORS_ORIGINS") or ["http://localhost:5173"])
+    os.makedirs(app.config.get("CHUNK_STORAGE_DIR") or "./data/chunks", exist_ok=True)
+    os.makedirs(app.config.get("KMS_DIR") or "./data/keys", exist_ok=True)
 
 
 def _register_blueprints(app: Flask) -> None:
-    """Register every blueprint under the /api/v1 prefix.
-
-    TODO (each owner registers their own):
-        from app.blueprints.auth import auth_bp
-        app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
-        ... users, cases, documents, audit, signatures, sharing, search ...
-        # share_access is PUBLIC: url_prefix="/api/v1/share"
-    """
+    from app.blueprints.auth import auth_bp
+    from app.blueprints.cases import cases_bp
     from app.blueprints.documents import documents_bp
+    from app.blueprints.users import users_bp
 
+    app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
+    app.register_blueprint(users_bp, url_prefix="/api/v1/users")
+    app.register_blueprint(cases_bp, url_prefix="/api/v1/cases")
     app.register_blueprint(documents_bp, url_prefix="/api/v1")
 
 
-def _register_error_handlers(app: Flask) -> None:
-    """Wire the handlers in app.core.errors so every error returns the JSON envelope
-    { "error": { "code", "message", "request_id" } }. TODO."""
-    pass
-
-
 def _configure_logging(app: Flask) -> None:
-    """Set up structlog. Rule: never log document content, passwords, keys, or PII —
-    only IDs and event types. TODO."""
-    pass
+    logging.basicConfig(level=getattr(logging, str(app.config.get("LOG_LEVEL", "INFO")).upper(), logging.INFO))
+    app.logger.setLevel(app.config.get("LOG_LEVEL", "INFO"))
+
+
+def _register_jwt_callbacks() -> None:
+    from app.core.errors import error_response
+
+    @jwt.expired_token_loader
+    def _expired(_header, _payload):
+        return error_response(401, "UNAUTHORIZED", "Token expired")
+
+    @jwt.invalid_token_loader
+    def _invalid(_reason):
+        return error_response(401, "UNAUTHORIZED", "unauthorised")
+
+    @jwt.unauthorized_loader
+    def _missing(_reason):
+        return error_response(401, "UNAUTHORIZED", "unauthorised")
+
+
+def _register_health(app: Flask) -> None:
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
