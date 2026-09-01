@@ -30,6 +30,11 @@ def register_error_handlers(app) -> None:
 
     @app.errorhandler(ValidationError)
     def _validation(err: ValidationError):
+        app.logger.debug("marshmallow_validation_error fields=%s", err.messages)
+        # In development, surface the field errors; in production keep it generic.
+        if app.debug:
+            import json as _json
+            return error_response(400, "VALIDATION_ERROR", _json.dumps(err.messages))
         return error_response(400, "VALIDATION_ERROR", "Invalid request")
 
     @app.errorhandler(429)

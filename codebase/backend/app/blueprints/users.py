@@ -44,7 +44,7 @@ def change_password():
 
 
 @users_bp.get("")
-@require_roles(Role.SUPER_ADMIN)
+@require_roles(Role.SUPER_ADMIN, Role.CASE_OFFICER)
 def list_users(current_user):
     users = user_service.list_users()
     return {"users": UserResponseSchema(many=True).dump(users)}

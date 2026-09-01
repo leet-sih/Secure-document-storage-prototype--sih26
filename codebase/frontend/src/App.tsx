@@ -1,29 +1,28 @@
 /**
  * App.tsx — top-level routing + auth gating.
  *
- * WHAT IT DOES:
- *   - Wraps the tree in <AuthProvider> and restores the session on load (bootstrap()).
- *   - Defines routes (React Router v6); protected routes go through <ProtectedRoute>,
- *     which redirects to /login (anon), /change-password (isFirstLogin), or /mfa-setup
- *     (MFA not yet enrolled), and enforces role gates.
- *
- * ROUTE MAP (auth wire-up scope — case/search/audit/profile pages land in later features):
+ * ROUTE MAP:
  *   /login            LoginPage          (public)
  *   /change-password  ChangePasswordPage (auth, forced on first login)
  *   /mfa-setup        MfaSetupPage       (auth, forced until TOTP enrolled)
- *   /admin/users      UserAdminPage      (auth, SUPER_ADMIN)
- *   /                 DashboardPage      (auth) — minimal landing
- *   *                 -> "/"
+ *   /cases            DashboardPage      (auth, AppShell)
+ *   /cases/:id        CaseDetailPage     (auth, AppShell)
+ *   /admin/users      UserAdminPage      (auth, SUPER_ADMIN, AppShell)
+ *   /                 -> /cases
+ *   *                 -> /cases
  */
 import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
+import AppShell from "./components/AppShell";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { useAuthActions } from "./hooks/useAuth";
+import CaseDetailPage from "./pages/CaseDetailPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
 import MfaSetupPage from "./pages/MfaSetupPage";
+import PersonalVaultPage from "./pages/PersonalVaultPage";
 import UserAdminPage from "./pages/UserAdminPage";
 import { AuthProvider } from "./store/AuthContext";
 
@@ -56,22 +55,47 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/admin/users"
+        path="/cases"
         element={
-          <ProtectedRoute roles={["SUPER_ADMIN"]}>
-            <UserAdminPage />
+          <ProtectedRoute>
+            <AppShell>
+              <DashboardPage />
+            </AppShell>
           </ProtectedRoute>
         }
       />
       <Route
-        path="/"
+        path="/cases/:id"
         element={
           <ProtectedRoute>
-            <DashboardPage />
+            <AppShell>
+              <CaseDetailPage />
+            </AppShell>
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route
+        path="/my-documents"
+        element={
+          <ProtectedRoute>
+            <AppShell>
+              <PersonalVaultPage />
+            </AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/users"
+        element={
+          <ProtectedRoute roles={["SUPER_ADMIN"]}>
+            <AppShell>
+              <UserAdminPage />
+            </AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/" element={<Navigate to="/cases" replace />} />
+      <Route path="*" element={<Navigate to="/cases" replace />} />
     </Routes>
   );
 }

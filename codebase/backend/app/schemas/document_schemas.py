@@ -41,7 +41,7 @@ class DocumentPatchSchema(_Base):
 
 class DocumentMetadataSchema(Schema):
     id = fields.UUID(dump_only=True)
-    case_id = fields.UUID(dump_only=True)
+    case_id = fields.UUID(dump_only=True, allow_none=True)
     filename = fields.Str(dump_only=True)
     title = fields.Str(dump_only=True)
     mime_type = fields.Str(dump_only=True)

@@ -44,10 +44,14 @@ def _init_extensions(app: Flask) -> None:
 
 def _register_blueprints(app: Flask) -> None:
     from app.blueprints.auth import auth_bp
+    from app.blueprints.cases import cases_bp
+    from app.blueprints.documents import documents_bp
     from app.blueprints.users import users_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
     app.register_blueprint(users_bp, url_prefix="/api/v1/users")
+    app.register_blueprint(cases_bp, url_prefix="/api/v1/cases")
+    app.register_blueprint(documents_bp, url_prefix="/api/v1")
 
 
 def _configure_logging(app: Flask) -> None:
