@@ -163,9 +163,12 @@ export interface DocumentMeta {
   filename: string;
   docType: DocType;
   fileSizeBytes: number;
+  totalChunks?: number;
+  integrityHash?: string | null;
   tags: string[];
   status: string;
   createdAt: string;
+  uploadedByName?: string | null;
   ocrStatus?: string;
   ocrConfidence?: number | null;
   ocrRawText?: string | null;

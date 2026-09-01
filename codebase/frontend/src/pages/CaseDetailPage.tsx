@@ -7,21 +7,23 @@ import {
   Download,
   FileText,
   LayoutDashboard,
+  MoreVertical,
   PenLine,
   Plus,
+  ShieldCheck,
   Trash2,
   Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import AddMemberModal from "../components/AddMemberModal";
-import DocumentDetailPanel from "../components/DocumentDetailPanel";
 import ConfirmModal from "../components/ConfirmModal";
+import DocumentDetailPanel from "../components/DocumentDetailPanel";
 import DocumentUploader from "../components/DocumentUploader";
 import OcrApprovalModal from "../components/OcrApprovalModal";
 import TransferCaseModal from "../components/TransferCaseModal";
 import { getCase, getTimeline, patchCase, removeMember } from "../lib/caseApi";
-import { downloadDocument, fetchCaseDocs, generateOcr } from "../lib/documentApi";
+import { deleteDocument, downloadDocument, fetchCaseDocs, generateOcr } from "../lib/documentApi";
 import { useAuth } from "../store/AuthContext";
 import type {
   CaseDetail,
@@ -816,6 +818,8 @@ export default function CaseDetailPage() {
   const [ocrGenerating, setOcrGenerating] = useState<string | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<DocumentMeta | null>(null);
   const [openSignForm, setOpenSignForm] = useState(false);
+  const [menuDocId, setMenuDocId] = useState<string | null>(null);
+  const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<DocumentMeta | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -851,6 +855,16 @@ export default function CaseDetailPage() {
       /* non-fatal — status unchanged in UI */
     } finally {
       setOcrGenerating(null);
+    }
+  }
+
+  async function handleDeleteDoc(doc: DocumentMeta) {
+    try {
+      await deleteDocument(doc.id);
+      setDocs((prev) => prev.filter((d) => d.id !== doc.id));
+      if (selectedDoc?.id === doc.id) setSelectedDoc(null);
+    } catch {
+      /* non-fatal — show no toast in prototype */
     }
   }
 
@@ -1240,43 +1254,54 @@ export default function CaseDetailPage() {
                             )}
                             <button
                               type="button"
-                              onClick={(e) => { e.stopPropagation(); setSelectedDoc(d); setOpenSignForm(true); }}
-                              style={{
-                                height: "28px",
-                                padding: "0 10px",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "5px",
-                                background: "transparent",
-                                border: "1px solid #2a2d35",
-                                borderRadius: "4px",
-                                color: "#8b8fa8",
-                                fontSize: "12px",
-                                cursor: "pointer",
-                              }}
+                              onClick={() => void downloadDocument(d.id, d.filename)}
+                              title="Download"
+                              style={{ height: "28px", width: "28px", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid #2a2d35", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}
                             >
-                              <PenLine size={12} /> Sign
+                              <Download size={13} />
                             </button>
                             <button
                               type="button"
-                              onClick={() => downloadDocument(d.id, d.filename)}
-                              style={{
-                                height: "28px",
-                                padding: "0 10px",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "5px",
-                                background: "#3b82f6",
-                                border: "none",
-                                borderRadius: "4px",
-                                color: "#ffffff",
-                                fontSize: "12px",
-                                fontWeight: 500,
-                                cursor: "pointer",
-                              }}
+                              onClick={(e) => { e.stopPropagation(); setSelectedDoc(d); setOpenSignForm(true); }}
+                              title="Sign document"
+                              style={{ height: "28px", width: "28px", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid #2a2d35", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}
                             >
-                              <Download size={12} /> Download
+                              <PenLine size={13} />
                             </button>
+                            {/* Three-dot expandable menu */}
+                            <div style={{ position: "relative" }}>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setMenuDocId(menuDocId === d.id ? null : d.id); }}
+                                title="More actions"
+                                style={{ height: "28px", width: "28px", display: "inline-flex", alignItems: "center", justifyContent: "center", background: menuDocId === d.id ? "#1e2028" : "transparent", border: "1px solid #2a2d35", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}
+                              >
+                                <MoreVertical size={13} />
+                              </button>
+                              {menuDocId === d.id && (
+                                <>
+                                  <div style={{ position: "fixed", inset: 0, zIndex: 49 }} onClick={() => setMenuDocId(null)} />
+                                  <div style={{ position: "absolute", right: 0, top: 32, zIndex: 50, background: "#1a1d24", border: "1px solid #2a2d35", borderRadius: "6px", minWidth: "168px", padding: "4px 0", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setMenuDocId(null); setSelectedDoc(d); setOpenSignForm(false); }}
+                                      style={{ width: "100%", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: "none", color: "#e8eaf0", fontSize: "13px", cursor: "pointer", textAlign: "left" }}
+                                    >
+                                      <ShieldCheck size={14} style={{ color: "#8b8fa8" }} /> View signatures
+                                    </button>
+                                    {(user?.role === "SUPER_ADMIN" || user?.role === "CASE_OFFICER") && (
+                                      <button
+                                        type="button"
+                                        onClick={() => { setMenuDocId(null); setConfirmDeleteDoc(d); }}
+                                        style={{ width: "100%", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: "none", color: "#ef4444", fontSize: "13px", cursor: "pointer", textAlign: "left" }}
+                                      >
+                                        <Trash2 size={14} /> Delete document
+                                      </button>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -1326,6 +1351,16 @@ export default function CaseDetailPage() {
           onClose={() => setSelectedDoc(null)}
           initialSignFormOpen={openSignForm}
           onDownload={() => downloadDocument(selectedDoc.id, selectedDoc.filename)}
+        />
+      )}
+
+      {confirmDeleteDoc && (
+        <ConfirmModal
+          title="Delete document"
+          body={`Permanently delete "${confirmDeleteDoc.filename}"? The action is logged to the audit trail.`}
+          confirmLabel="Delete"
+          onConfirm={() => { void handleDeleteDoc(confirmDeleteDoc); setConfirmDeleteDoc(null); }}
+          onClose={() => setConfirmDeleteDoc(null)}
         />
       )}
     </>

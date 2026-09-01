@@ -3,8 +3,8 @@ document_schemas.py — document upload metadata + safe response serialization.
 
 DocumentUploadSchema   -> validates the non-file form fields of POST .../documents
 DocumentPatchSchema    -> PATCH /documents/{id}  (title, tags)
-DocumentMetadataSchema -> serialization. NEVER dumps integrity_hash, chunk IVs/hashes,
-                          or anything that would help reconstruct the file.
+DocumentMetadataSchema -> serialization. integrity_hash is exposed for UI verification
+                          (truncated in display); chunk IVs/hashes are never exposed.
 
 The binary `file` part is handled directly in the blueprint (streamed), not by marshmallow.
 """
@@ -53,9 +53,11 @@ class DocumentMetadataSchema(Schema):
     doc_type = fields.Str(dump_only=True)
     file_size_bytes = fields.Int(dump_only=True)
     total_chunks = fields.Int(dump_only=True)
+    integrity_hash = fields.Str(dump_only=True)
     tags = fields.List(fields.Str(), dump_only=True)
     status = fields.Str(dump_only=True)
     uploaded_by = fields.UUID(dump_only=True)
+    uploaded_by_name = fields.Method("_get_uploader_name", dump_only=True)
     created_at = fields.DateTime(dump_only=True)
     # OCR fields
     ocr_status = fields.Str(dump_only=True)
@@ -64,3 +66,9 @@ class DocumentMetadataSchema(Schema):
     ocr_formatted_text = fields.Str(dump_only=True, allow_none=True, attribute="search_text")
     ocr_page_count = fields.Int(dump_only=True, allow_none=True)
     ocr_detail = fields.Str(dump_only=True, allow_none=True)
+
+    def _get_uploader_name(self, obj) -> str | None:
+        from app.extensions import db
+        from app.models.user import User
+        user = db.session.get(User, obj.uploaded_by)
+        return user.full_name if user else None
