@@ -120,6 +120,7 @@ export default function AppShell({ children }: Props) {
 
         {/* Nav tabs */}
         <div
+          className="no-scrollbar"
           style={{
             display: "flex",
             alignItems: "stretch",
@@ -181,6 +182,7 @@ export default function AppShell({ children }: Props) {
               <UserCircle size={18} />
             </span>
             <span
+              className="user-name-text"
               style={{
                 display: "flex",
                 flexDirection: "column",
@@ -256,6 +258,7 @@ export default function AppShell({ children }: Props) {
         }}
       >
         <div
+          className="shell-content"
           style={{
             flex: 1,
             minWidth: 0,

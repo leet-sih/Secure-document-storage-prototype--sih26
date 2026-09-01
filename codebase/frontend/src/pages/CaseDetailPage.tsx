@@ -16,9 +16,10 @@ import type { ReactNode } from "react";
 import AddMemberModal from "../components/AddMemberModal";
 import ConfirmModal from "../components/ConfirmModal";
 import DocumentUploader from "../components/DocumentUploader";
+import OcrApprovalModal from "../components/OcrApprovalModal";
 import TransferCaseModal from "../components/TransferCaseModal";
 import { getCase, getTimeline, patchCase, removeMember } from "../lib/caseApi";
-import { downloadDocument, fetchCaseDocs } from "../lib/documentApi";
+import { downloadDocument, fetchCaseDocs, generateOcr } from "../lib/documentApi";
 import { useAuth } from "../store/AuthContext";
 import type {
   CaseDetail,
@@ -29,6 +30,93 @@ import type {
   DocumentMeta,
   TimelineEvent,
 } from "../types";
+
+// ── OCR helpers ───────────────────────────────────────────────────────────────
+
+const OCR_EXT = new Set([".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif"]);
+
+function isOcrSupported(filename: string): boolean {
+  const dot = filename.lastIndexOf(".");
+  return dot >= 0 && OCR_EXT.has(filename.slice(dot).toLowerCase());
+}
+
+function OcrStatusBadge({ doc }: { doc: Pick<DocumentMeta, "ocrStatus" | "ocrConfidence" | "ocrDetail"> }) {
+  const { ocrStatus, ocrConfidence, ocrDetail } = doc;
+  if (!ocrStatus || ocrStatus === "NOT_APPLICABLE" || ocrStatus === "PENDING") return null;
+
+  if (ocrStatus === "FAILED") {
+    const pct = ocrConfidence != null ? Math.round(ocrConfidence * 100) : null;
+    const label = pct != null ? `OCR Failed · ${pct}%` : "OCR Failed";
+    return (
+      <span
+        title={ocrDetail ?? undefined}
+        style={{
+          display: "inline-block",
+          marginLeft: "6px",
+          fontSize: "10px",
+          fontWeight: 500,
+          padding: "1px 5px",
+          borderRadius: "3px",
+          color: "#ef4444",
+          background: "#3d1010",
+          verticalAlign: "middle",
+          cursor: ocrDetail ? "help" : "default",
+          textDecoration: ocrDetail ? "underline dotted" : "none",
+        }}
+      >
+        {label}
+      </span>
+    );
+  }
+
+  if (ocrStatus === "AWAITING_APPROVAL") {
+    const pct = ocrConfidence != null ? Math.round(ocrConfidence * 100) : null;
+    const isLow = ocrConfidence != null && ocrConfidence < 0.6;
+    const label = isLow && pct != null ? `Pending Review · ${pct}%` : "Pending Review";
+    return (
+      <span
+        title={isLow ? (ocrDetail ?? "Low confidence — review carefully") : undefined}
+        style={{
+          display: "inline-block",
+          marginLeft: "6px",
+          fontSize: "10px",
+          fontWeight: 500,
+          padding: "1px 5px",
+          borderRadius: "3px",
+          color: isLow ? "#fb923c" : "#f59e0b",
+          background: "#3d2c08",
+          verticalAlign: "middle",
+          cursor: isLow ? "help" : "default",
+          textDecoration: isLow ? "underline dotted" : "none",
+        }}
+      >
+        {label}
+      </span>
+    );
+  }
+
+  if (ocrStatus === "DONE") {
+    return (
+      <span
+        style={{
+          display: "inline-block",
+          marginLeft: "6px",
+          fontSize: "10px",
+          fontWeight: 500,
+          padding: "1px 5px",
+          borderRadius: "3px",
+          color: "#22c55e",
+          background: "#14391f",
+          verticalAlign: "middle",
+        }}
+      >
+        OCR Done
+      </span>
+    );
+  }
+
+  return null;
+}
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 
@@ -131,6 +219,7 @@ function OverviewTab({ detail, onSaved }: OverviewTabProps) {
       }}
     >
       <div
+        className="overview-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "160px 1fr",
@@ -721,6 +810,8 @@ export default function CaseDetailPage() {
   const [showTransfer, setShowTransfer] = useState(false);
   const [docs, setDocs] = useState<DocumentMeta[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
+  const [ocrDoc, setOcrDoc] = useState<DocumentMeta | null>(null);
+  const [ocrGenerating, setOcrGenerating] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -740,6 +831,23 @@ export default function CaseDetailPage() {
       .then(setDocs)
       .catch(() => {/* non-fatal; docs list stays empty */})
       .finally(() => setDocsLoading(false));
+  }
+
+  function updateDoc(updated: DocumentMeta) {
+    setDocs((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+  }
+
+  async function handleGenerateOcr(doc: DocumentMeta, force = false) {
+    setOcrGenerating(doc.id);
+    try {
+      const updated = await generateOcr(doc.id, force);
+      updateDoc(updated);
+      if (updated.ocrStatus === "AWAITING_APPROVAL") setOcrDoc(updated);
+    } catch {
+      /* non-fatal — status unchanged in UI */
+    } finally {
+      setOcrGenerating(null);
+    }
   }
 
   if (loading) {
@@ -912,10 +1020,12 @@ export default function CaseDetailPage() {
 
         {/* Tab bar */}
         <div
+          className="no-scrollbar"
           style={{
             display: "flex",
             gap: "4px",
             borderBottom: "1px solid #2a2d35",
+            overflowX: "auto",
           }}
         >
           {tabs.map((t) => {
@@ -990,7 +1100,8 @@ export default function CaseDetailPage() {
                   <div style={{ fontSize: "13px", color: "#8b8fa8" }}>No documents yet.</div>
                 </div>
               ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", minWidth: "640px", borderCollapse: "collapse", fontSize: "13px" }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid #2a2d35" }}>
                       {["Filename", "Type", "Size", "Uploaded", ""].map((h, i) => (
@@ -1016,6 +1127,7 @@ export default function CaseDetailPage() {
                       >
                         <td style={{ padding: "10px 16px", color: "#e8eaf0", fontFamily: "monospace", fontSize: "12px" }}>
                           {d.filename}
+                          <OcrStatusBadge doc={d} />
                         </td>
                         <td style={{ padding: "10px 16px", color: "#8b8fa8" }}>
                           {d.docType.replace(/_/g, " ")}
@@ -1029,31 +1141,126 @@ export default function CaseDetailPage() {
                           {new Date(d.createdAt).toLocaleDateString()}
                         </td>
                         <td style={{ padding: "6px 16px", textAlign: "right" }}>
-                          <button
-                            type="button"
-                            onClick={() => downloadDocument(d.id, d.filename)}
-                            style={{
-                              height: "28px",
-                              padding: "0 10px",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "5px",
-                              background: "#3b82f6",
-                              border: "none",
-                              borderRadius: "4px",
-                              color: "#ffffff",
-                              fontSize: "12px",
-                              fontWeight: 500,
-                              cursor: "pointer",
-                            }}
-                          >
-                            <Download size={12} /> Download
-                          </button>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                            {/* Generate OCR — first-time scan */}
+                            {d.ocrStatus === "NOT_APPLICABLE" && isOcrSupported(d.filename) && (
+                              <button
+                                type="button"
+                                disabled={ocrGenerating === d.id}
+                                onClick={() => handleGenerateOcr(d)}
+                                style={{
+                                  height: "28px",
+                                  padding: "0 10px",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "5px",
+                                  background: "transparent",
+                                  border: "1px solid #2a2d35",
+                                  borderRadius: "4px",
+                                  color: "#8b8fa8",
+                                  fontSize: "12px",
+                                  cursor: ocrGenerating === d.id ? "not-allowed" : "pointer",
+                                  opacity: ocrGenerating === d.id ? 0.6 : 1,
+                                }}
+                              >
+                                {ocrGenerating === d.id ? "Scanning…" : "Generate OCR"}
+                              </button>
+                            )}
+                            {/* Review OCR — awaiting approval */}
+                            {d.ocrStatus === "AWAITING_APPROVAL" && (
+                              <button
+                                type="button"
+                                onClick={() => setOcrDoc(d)}
+                                style={{
+                                  height: "28px",
+                                  padding: "0 10px",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "5px",
+                                  background: "#3d2c08",
+                                  border: "1px solid #f59e0b",
+                                  borderRadius: "4px",
+                                  color: "#f59e0b",
+                                  fontSize: "12px",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                Review OCR
+                              </button>
+                            )}
+                            {/* View OCR — approved */}
+                            {d.ocrStatus === "DONE" && (
+                              <button
+                                type="button"
+                                onClick={() => setOcrDoc(d)}
+                                style={{
+                                  height: "28px",
+                                  padding: "0 10px",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "5px",
+                                  background: "#14391f",
+                                  border: "1px solid #22c55e",
+                                  borderRadius: "4px",
+                                  color: "#22c55e",
+                                  fontSize: "12px",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                View OCR
+                              </button>
+                            )}
+                            {/* Re-OCR — for failed / done / pending-review docs */}
+                            {(d.ocrStatus === "FAILED" || d.ocrStatus === "DONE" || d.ocrStatus === "AWAITING_APPROVAL") && isOcrSupported(d.filename) && (
+                              <button
+                                type="button"
+                                disabled={ocrGenerating === d.id}
+                                onClick={() => handleGenerateOcr(d, true)}
+                                style={{
+                                  height: "28px",
+                                  padding: "0 10px",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "5px",
+                                  background: "transparent",
+                                  border: "1px solid #2a2d35",
+                                  borderRadius: "4px",
+                                  color: "#555869",
+                                  fontSize: "12px",
+                                  cursor: ocrGenerating === d.id ? "not-allowed" : "pointer",
+                                  opacity: ocrGenerating === d.id ? 0.6 : 1,
+                                }}
+                              >
+                                {ocrGenerating === d.id ? "Scanning…" : "Re-OCR"}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => downloadDocument(d.id, d.filename)}
+                              style={{
+                                height: "28px",
+                                padding: "0 10px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                background: "#3b82f6",
+                                border: "none",
+                                borderRadius: "4px",
+                                color: "#ffffff",
+                                fontSize: "12px",
+                                fontWeight: 500,
+                                cursor: "pointer",
+                              }}
+                            >
+                              <Download size={12} /> Download
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </div>
@@ -1078,6 +1285,14 @@ export default function CaseDetailPage() {
             setShowTransfer(false);
           }}
           onClose={() => setShowTransfer(false)}
+        />
+      )}
+
+      {ocrDoc && (
+        <OcrApprovalModal
+          doc={ocrDoc}
+          onUpdated={updateDoc}
+          onClose={() => setOcrDoc(null)}
         />
       )}
     </>

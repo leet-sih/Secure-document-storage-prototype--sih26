@@ -16,6 +16,13 @@ pyotp==2.9.*                   # TOTP MFA
 qrcode[pil]==8.0.*             # MFA setup QR codes
 cryptography==43.*             # AES-256-GCM, HKDF, Ed25519
 
+# ─── OCR ───
+pytesseract==0.3.*             # Tesseract Python binding
+numpy>=1.24                    # image array processing
+opencv-python-headless>=4.8    # preprocessing (deskew, denoise) — headless = no GUI
+pypdfium2>=4.0                 # PDF rasterisation and text-layer extraction (offline, no poppler)
+Pillow>=10.0                   # image I/O
+
 # ─── Utilities ───
 python-magic==0.4.*            # MIME detection by magic bytes
 Flask-Cors==5.0.*
