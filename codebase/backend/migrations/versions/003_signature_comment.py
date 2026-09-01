@@ -1,25 +1,28 @@
-"""Add signing_private_key_enc to users; create document_signatures
+"""Create document_signatures table and add signing_private_key_enc to users
 
-Revision ID: 002_signatures
-Revises: 001_auth_totp
-Create Date: 2026-09-01
+Revision ID: 003_signature_comment
+Revises: 007_encrypt_ocr_text_fields
+Create Date: 2026-09-02
 
-DEPENDS ON: 001_auth_totp (users table), and a `documents` table created by the
-            documents feature migration (or db.create_all() in dev).
+Context: The feat/ocr-integration branch (merged first) went from 001_auth_totp
+through its own 003-007 chain, adding signing_public_key to users but never
+applying the original 002_signatures migration. This migration bridges that gap:
+it adds signing_private_key_enc (missing from 002_signatures) and creates the
+document_signatures table, plus the comment column from day one.
 """
 
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision = "002_signatures"
-down_revision = "001_auth_totp"
+revision = "003_signature_comment"
+down_revision = "007_encrypt_ocr_text_fields"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    # Private key column on users — AES-256-GCM wrapped, hex(iv || ct+tag)
+    # Private key column on users (encrypted Ed25519 private key, AES-256-GCM wrapped)
     op.add_column("users", sa.Column("signing_private_key_enc", sa.Text(), nullable=True))
 
     op.create_table(
@@ -43,6 +46,7 @@ def upgrade() -> None:
         sa.Column("is_valid", sa.Boolean(), nullable=True),
         sa.Column("last_verified_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("comment", sa.Text(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

@@ -1,10 +1,10 @@
 /**
  * useSignatures — API calls for document digital signatures.
  *
- * sign(docId)               POST /documents/{id}/sign
- * listSignatures(docId)     GET  /documents/{id}/signatures
- * verifySignatures(docId)   POST /documents/{id}/signatures/verify
- * revokeSignature(docId, sigId)  DELETE /documents/{id}/signatures/{sig_id}
+ * sign(comment?)            POST /documents/{id}/sign
+ * listSignatures()          GET  /documents/{id}/signatures
+ * verifySignatures()        POST /documents/{id}/signatures/verify
+ * revokeSignature(sigId)    DELETE /documents/{id}/signatures/{sig_id}
  */
 
 import { useState, useCallback } from "react";
@@ -25,6 +25,7 @@ export interface Signature {
   is_valid: boolean | null;
   last_verified_at: string | null;
   revoked_at: string | null;
+  comment: string | null;
 }
 
 export interface VerifyResult {
@@ -66,12 +67,15 @@ export function useSignatures(docId: string) {
     }
   }, [docId]);
 
-  const sign = useCallback(async (): Promise<Signature | null> => {
+  const sign = useCallback(async (comment?: string): Promise<Signature | null> => {
     setLoading(true);
     setError(null);
     try {
+      const body: Record<string, string> = {};
+      if (comment) body.comment = comment;
       const sig = (await apiFetch(`/documents/${docId}/sign`, {
         method: "POST",
+        body: JSON.stringify(body),
       })) as Signature;
       setSignatures((prev) => [sig, ...prev]);
       return sig;

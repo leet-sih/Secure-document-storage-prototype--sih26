@@ -18,12 +18,13 @@ from flask import Blueprint, jsonify, request
 from app.core.audit_events import AuditEventType
 from app.core.rbac import Role, require_roles
 from app.core.security import current_user_required, require_access_jwt
-from app.schemas.signature_schemas import SignatureResponseSchema, VerifyResponseSchema
+from app.schemas.signature_schemas import SignRequestSchema, SignatureResponseSchema, VerifyResponseSchema
 from app.services import signature_service
 from app.services.audit_service import audit_service
 
 signatures_bp = Blueprint("signatures", __name__)
 
+_sign_req_schema = SignRequestSchema()
 _sig_schema = SignatureResponseSchema()
 _sig_list_schema = SignatureResponseSchema(many=True)
 
@@ -31,7 +32,8 @@ _sig_list_schema = SignatureResponseSchema(many=True)
 @signatures_bp.route("/documents/<uuid:doc_id>/sign", methods=["POST"])
 @require_roles(Role.SUPER_ADMIN, Role.CASE_OFFICER, Role.INVESTIGATOR)
 def sign_document(doc_id, current_user):
-    sig = signature_service.sign_document(str(doc_id), current_user)
+    body = _sign_req_schema.load(request.get_json(silent=True) or {})
+    sig = signature_service.sign_document(str(doc_id), current_user, comment=body.get("comment"))
     audit_service.record(
         AuditEventType.DOCUMENT_SIGNED.value,
         actor_user_id=current_user.id,

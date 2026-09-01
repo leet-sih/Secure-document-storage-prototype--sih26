@@ -68,7 +68,7 @@ def _load_signatures(document_id: str, requesting_user_id: str) -> list[Document
     ).all()
 
 
-def sign_document(document_id: str, signer) -> DocumentSignature:
+def sign_document(document_id: str, signer, comment: str | None = None) -> DocumentSignature:
     """Cryptographically sign `document_id` as `signer`.
     Returns the new DocumentSignature row. Raises 409 if already signed or case archived."""
     signer_id = str(signer.id)
@@ -99,6 +99,7 @@ def sign_document(document_id: str, signer) -> DocumentSignature:
         integrity_hash_at_signing=doc.integrity_hash,
         signed_payload_hash=payload_hash,
         signature_hex=sig_hex,
+        comment=comment,
         created_at=ts,
     )
     db.session.add(sig)

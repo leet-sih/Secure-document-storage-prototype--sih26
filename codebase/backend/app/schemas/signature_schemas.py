@@ -1,15 +1,23 @@
 """
-signature_schemas.py — signature response serialization.
+signature_schemas.py — signature request/response serialization.
 
+SignRequestSchema       -> validates optional body for POST /sign (only comment; identity from JWT).
 SignatureResponseSchema -> for POST /sign and GET /signatures list items.
-VerifyResultSchema     -> one entry in the POST /verify result list.
-VerifyResponseSchema   -> full POST /verify response body.
+VerifyResultSchema      -> one entry in the POST /verify result list.
+VerifyResponseSchema    -> full POST /verify response body.
 
 NEVER dumps signature_hex, signed_payload_hash, or integrity_hash_at_signing — those are
-internal cryptographic values. Signing takes no request body (identity is the JWT).
+internal cryptographic values.
 """
 
-from marshmallow import Schema, fields
+from marshmallow import EXCLUDE, Schema, fields, validate
+
+
+class SignRequestSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE  # empty body or no body is valid
+
+    comment = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=500))
 
 
 class _SignerBriefSchema(Schema):
@@ -27,6 +35,7 @@ class SignatureResponseSchema(Schema):
     is_valid = fields.Bool(dump_only=True, allow_none=True)
     last_verified_at = fields.DateTime(dump_only=True, allow_none=True)
     revoked_at = fields.DateTime(dump_only=True, allow_none=True)
+    comment = fields.Str(dump_only=True, allow_none=True)
 
     def _dump_signer(self, obj):
         from app.extensions import db

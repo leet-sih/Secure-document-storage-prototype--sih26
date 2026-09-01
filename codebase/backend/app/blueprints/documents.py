@@ -1,22 +1,20 @@
 """
-documents.py — upload / list / download / delete. Prefix: /api/v1
+documents.py — upload / list / download / delete + OCR. Prefix: /api/v1
 
 ROUTES:
-    POST   /cases/{case_id}/documents   [SUPER_ADMIN, CASE_OFFICER]  multipart upload (rate-limited)
-        Streams the `file` part into document_service.upload_document. Blocks if the case is
-        CLOSED/ARCHIVED. Records DOCUMENT_UPLOADED.
-    GET    /cases/{case_id}/documents   [members]  list metadata (no content). 404 if not a member.
-    GET    /documents/{id}/download     [members]  pre-verify all chunks -> stream plaintext;
-        Content-Disposition: attachment. IntegrityError -> 422 INTEGRITY_VIOLATION.
-        Records DOCUMENT_DOWNLOADED.
-    DELETE /documents/{id}              [SUPER_ADMIN, CASE_OFFICER]  soft delete; DOCUMENT_DELETED
+    POST   /cases/{case_id}/documents        [SUPER_ADMIN, CASE_OFFICER]  multipart upload
+    GET    /cases/{case_id}/documents        [members]  list metadata (no content)
+    GET    /documents/{id}/download          [any auth]  pre-verify + stream plaintext
+    DELETE /documents/{id}                   [SUPER_ADMIN, CASE_OFFICER]  soft delete
+    POST   /documents/{id}/ocr              [any auth]  trigger OCR on demand
+    POST   /documents/{id}/ocr/approve      [any auth]  approve or dismiss OCR text
+    POST   /me/documents                     [any auth]  personal vault upload
+    GET    /me/documents                     [any auth]  list own personal documents
 
-Case-scoped access (membership) is enforced in document_service/case_service and returns 404
-(not 403) to non-members — the route-level RBAC only gates coarse SYSTEM roles.
+Case-scoped access (404 not 403 for non-members) is enforced in document_service/case_service.
+Personal docs are owner-only; the service checks uploaded_by == requesting_user_id.
 
-The binary `file` part is read from werkzeug's FileStorage.stream (a seekable spooled temp file),
-so the magic-byte sniff works and we never materialise 500 MB in a single Python bytes object.
-See feature_plans/specs/document_encryption_keystore_spec.md + docs/EDGE_CASES.md §1 & §5.
+See feature_plans/specs/ocr_integration_spec.md + docs/EDGE_CASES.md §1 & §5.
 """
 
 from flask import Blueprint, Response, jsonify, request
@@ -27,16 +25,36 @@ from app.core.errors import APIError
 from app.core.rate_limit import UPLOAD_LIMITS
 from app.core.rbac import Role, require_roles
 from app.extensions import limiter
-from app.schemas.document_schemas import DocumentMetadataSchema, DocumentUploadSchema
-from app.services import document_service
+from app.schemas.document_schemas import DocumentMetadataSchema, DocumentUploadSchema, OcrActionSchema
+from app.services import document_service, signature_service
 from app.services.audit_service import audit_service
 from app.services.document_service import IntegrityError
 
 documents_bp = Blueprint("documents", __name__)
 
 _upload_schema = DocumentUploadSchema()
+_ocr_action_schema = OcrActionSchema()
 _metadata_schema = DocumentMetadataSchema()
 _metadata_list_schema = DocumentMetadataSchema(many=True)
+
+
+def _parse_upload_payload():
+    """Extract and validate the non-file multipart fields for both upload endpoints."""
+    doc_type = (request.form.get("doc_type") or "").strip() or None
+    title = (request.form.get("title") or "").strip() or None
+    raw: dict = {}
+    if doc_type:
+        raw["doc_type"] = doc_type
+    if title:
+        raw["title"] = title
+    tags = [t.strip() for t in request.form.getlist("tags") if t.strip()]
+    if tags:
+        raw["tags"] = tags
+    # auto_ocr: accept "1", "true" (case-insensitive) as truthy
+    auto_ocr_raw = request.form.get("auto_ocr", "").strip().lower()
+    if auto_ocr_raw in ("1", "true"):
+        raw["auto_ocr"] = True
+    return _upload_schema.load(raw)
 
 
 @documents_bp.route("/cases/<uuid:case_id>/documents", methods=["POST"])
@@ -48,12 +66,7 @@ def upload_document(case_id, current_user):
     if file is None or not file.filename:
         raise APIError(400, "VALIDATION_ERROR", "Missing 'file' part")
 
-    # Validate the non-file form fields through marshmallow (unknown=RAISE).
-    raw = {"doc_type": request.form.get("doc_type"), "title": request.form.get("title")}
-    tags = request.form.getlist("tags")
-    if tags:
-        raw["tags"] = tags
-    payload = _upload_schema.load({k: v for k, v in raw.items() if v is not None})
+    payload = _parse_upload_payload()
 
     doc = document_service.upload_document(
         case_id=str(case_id),
@@ -64,6 +77,7 @@ def upload_document(case_id, current_user):
         uploader_id=current_user.id,
         title=payload.get("title"),
         tags=payload.get("tags"),
+        auto_ocr=payload.get("auto_ocr", False),
     )
     audit_service.record(
         AuditEventType.DOCUMENT_UPLOADED.value,
@@ -75,27 +89,23 @@ def upload_document(case_id, current_user):
             "filename": doc.filename,
             "size_bytes": doc.file_size_bytes,
             "chunks": doc.total_chunks,
+            "auto_ocr": payload.get("auto_ocr", False),
         },
     )
-
-    # Auto-sign: every upload is automatically signed by the uploader.
-    # Failure is best-effort — never blocks the upload 201 response.
+    # Auto-sign on upload: best-effort, never blocks the 201 response
     try:
-        from app.services import signature_service as _ss
-        _ss.sign_document(str(doc.id), current_user)
-        audit_service.record(
-            AuditEventType.DOCUMENT_SIGNED.value,
-            actor_user_id=current_user.id,
-            target_type="document",
-            target_id=doc.id,
-            case_id=str(case_id),
-            ip_address=request.remote_addr,
-            metadata={"auto": True},
-        )
+        if current_user.role in ("SUPER_ADMIN", "CASE_OFFICER", "INVESTIGATOR"):
+            signature_service.sign_document(str(doc.id), current_user)
+            audit_service.record(
+                AuditEventType.DOCUMENT_SIGNED.value,
+                actor_user_id=current_user.id,
+                target_type="document",
+                target_id=doc.id,
+                case_id=str(case_id),
+                metadata={"auto": True},
+            )
     except Exception:
-        from flask import current_app
-        current_app.logger.exception("Auto-sign failed for document %s", doc.id)
-
+        pass
     return jsonify(_metadata_schema.dump(doc)), 201
 
 
@@ -146,3 +156,88 @@ def delete_document(document_id, current_user):
         case_id=doc.case_id,
     )
     return "", 204
+
+
+# ── OCR ───────────────────────────────────────────────────────────
+
+@documents_bp.route("/documents/<uuid:document_id>/ocr", methods=["POST"])
+@jwt_required()
+def trigger_ocr(document_id):
+    user_id = get_jwt_identity()
+    body = request.get_json(silent=True) or {}
+    force = bool(body.get("force", False))
+    doc = document_service.generate_ocr_for_document(str(document_id), user_id, force=force)
+    audit_service.record(
+        AuditEventType.DOCUMENT_UPLOADED.value,  # closest available event; add OCR_GENERATED later
+        actor_user_id=user_id,
+        target_type="document",
+        target_id=doc.id,
+        case_id=doc.case_id,
+        metadata={"action": "ocr_generated", "ocr_status": doc.ocr_status},
+    )
+    return jsonify(_metadata_schema.dump(doc)), 200
+
+
+@documents_bp.route("/documents/<uuid:document_id>/ocr/approve", methods=["POST"])
+@jwt_required()
+def approve_ocr(document_id):
+    user_id = get_jwt_identity()
+    payload = _ocr_action_schema.load(request.get_json(silent=True) or {})
+    doc = document_service.approve_ocr(str(document_id), user_id, payload["action"])
+    audit_service.record(
+        AuditEventType.DOCUMENT_UPLOADED.value,
+        actor_user_id=user_id,
+        target_type="document",
+        target_id=doc.id,
+        case_id=doc.case_id,
+        metadata={"action": f"ocr_{payload['action']}d", "ocr_status": doc.ocr_status},
+    )
+    return jsonify(_metadata_schema.dump(doc)), 200
+
+
+# ── Personal vault ────────────────────────────────────────────────
+
+@documents_bp.route("/me/documents", methods=["POST"])
+@jwt_required()
+@limiter.limit(UPLOAD_LIMITS)
+def upload_personal_document():
+    user_id = get_jwt_identity()
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        raise APIError(400, "VALIDATION_ERROR", "Missing 'file' part")
+
+    payload = _parse_upload_payload()
+
+    doc = document_service.upload_personal_document(
+        file_stream=file.stream,
+        filename=file.filename,
+        mime_type=file.mimetype,
+        doc_type=payload["doc_type"],
+        uploader_id=user_id,
+        title=payload.get("title"),
+        tags=payload.get("tags"),
+        auto_ocr=payload.get("auto_ocr", False),
+    )
+    audit_service.record(
+        AuditEventType.DOCUMENT_UPLOADED.value,
+        actor_user_id=user_id,
+        target_type="document",
+        target_id=doc.id,
+        case_id=None,
+        metadata={
+            "filename": doc.filename,
+            "size_bytes": doc.file_size_bytes,
+            "chunks": doc.total_chunks,
+            "personal": True,
+            "auto_ocr": payload.get("auto_ocr", False),
+        },
+    )
+    return jsonify(_metadata_schema.dump(doc)), 201
+
+
+@documents_bp.route("/me/documents", methods=["GET"])
+@jwt_required()
+def list_personal_documents():
+    user_id = get_jwt_identity()
+    docs = document_service.list_personal_documents(user_id)
+    return jsonify(_metadata_list_schema.dump(docs)), 200
