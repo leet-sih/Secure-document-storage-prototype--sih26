@@ -166,3 +166,20 @@ def deactivate_user(user_id: str, actor) -> None:
         target_type="user",
         target_id=user.id,
     )
+
+
+def activate_user(user_id: str, actor) -> None:
+    user = get_user(user_id)
+
+    if user.is_active:
+        return
+
+    user.is_active = True
+    db.session.commit()
+
+    audit_service.record(
+        AuditEventType.USER_ACTIVATED.value,
+        actor_user_id=actor.id,
+        target_type="user",
+        target_id=user.id,
+    )

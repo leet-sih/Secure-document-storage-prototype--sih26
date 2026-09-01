@@ -68,6 +68,14 @@ def deactivate_user(user_id, current_user):
     return ("", 204)
 
 
+@users_bp.post("/<uuid:user_id>/activate")
+@require_roles(Role.SUPER_ADMIN)
+@require_recent_mfa()
+def activate_user(user_id, current_user):
+    user_service.activate_user(str(user_id), current_user)
+    return ("", 204)
+
+
 @users_bp.post("")
 @require_roles(Role.SUPER_ADMIN)
 @require_recent_mfa()
