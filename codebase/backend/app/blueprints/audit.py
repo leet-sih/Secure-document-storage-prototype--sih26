@@ -73,7 +73,7 @@ def verify_audit_chain(current_user):
 @require_roles(Role.SUPER_ADMIN, Role.AUDITOR, Role.CASE_OFFICER)
 def list_case_audit(case_id, current_user):
     if current_user.role == Role.CASE_OFFICER.value:
-       case_service.get_case_for_user(case_id, str(current_user.id))
+        case_service.get_case_for_user(case_id, str(current_user.id))
 
     events = (
         AuditEvent.query
