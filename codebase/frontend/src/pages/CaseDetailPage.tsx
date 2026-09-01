@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
+  AlertCircle,
   ArrowLeftRight,
+  ArrowUpDown,
   BadgeCheck,
+  CheckCircle2,
   Clock,
   Download,
   FileText,
@@ -10,9 +13,12 @@ import {
   MoreVertical,
   PenLine,
   Plus,
+  Search,
+  Share2,
   ShieldCheck,
   Trash2,
   Users,
+  XCircle,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -36,91 +42,6 @@ import type {
 } from "../types";
 
 // ── OCR helpers ───────────────────────────────────────────────────────────────
-
-const OCR_EXT = new Set([".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif"]);
-
-function isOcrSupported(filename: string): boolean {
-  const dot = filename.lastIndexOf(".");
-  return dot >= 0 && OCR_EXT.has(filename.slice(dot).toLowerCase());
-}
-
-function OcrStatusBadge({ doc }: { doc: Pick<DocumentMeta, "ocrStatus" | "ocrConfidence" | "ocrDetail"> }) {
-  const { ocrStatus, ocrConfidence, ocrDetail } = doc;
-  if (!ocrStatus || ocrStatus === "NOT_APPLICABLE" || ocrStatus === "PENDING") return null;
-
-  if (ocrStatus === "FAILED") {
-    const pct = ocrConfidence != null ? Math.round(ocrConfidence * 100) : null;
-    const label = pct != null ? `OCR Failed · ${pct}%` : "OCR Failed";
-    return (
-      <span
-        title={ocrDetail ?? undefined}
-        style={{
-          display: "inline-block",
-          marginLeft: "6px",
-          fontSize: "10px",
-          fontWeight: 500,
-          padding: "1px 5px",
-          borderRadius: "3px",
-          color: "#ef4444",
-          background: "#3d1010",
-          verticalAlign: "middle",
-          cursor: ocrDetail ? "help" : "default",
-          textDecoration: ocrDetail ? "underline dotted" : "none",
-        }}
-      >
-        {label}
-      </span>
-    );
-  }
-
-  if (ocrStatus === "AWAITING_APPROVAL") {
-    const pct = ocrConfidence != null ? Math.round(ocrConfidence * 100) : null;
-    const isLow = ocrConfidence != null && ocrConfidence < 0.6;
-    const label = isLow && pct != null ? `Pending Review · ${pct}%` : "Pending Review";
-    return (
-      <span
-        title={isLow ? (ocrDetail ?? "Low confidence — review carefully") : undefined}
-        style={{
-          display: "inline-block",
-          marginLeft: "6px",
-          fontSize: "10px",
-          fontWeight: 500,
-          padding: "1px 5px",
-          borderRadius: "3px",
-          color: isLow ? "#fb923c" : "#f59e0b",
-          background: "#3d2c08",
-          verticalAlign: "middle",
-          cursor: isLow ? "help" : "default",
-          textDecoration: isLow ? "underline dotted" : "none",
-        }}
-      >
-        {label}
-      </span>
-    );
-  }
-
-  if (ocrStatus === "DONE") {
-    return (
-      <span
-        style={{
-          display: "inline-block",
-          marginLeft: "6px",
-          fontSize: "10px",
-          fontWeight: 500,
-          padding: "1px 5px",
-          borderRadius: "3px",
-          color: "#22c55e",
-          background: "#14391f",
-          verticalAlign: "middle",
-        }}
-      >
-        OCR Done
-      </span>
-    );
-  }
-
-  return null;
-}
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 
@@ -174,6 +95,67 @@ function formatTs(iso: string): string {
     });
   } catch { return iso; }
 }
+
+const OCR_EXT_SET = new Set([".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif"]);
+function isOcrExt(filename: string) {
+  const dot = filename.lastIndexOf(".");
+  return dot >= 0 && OCR_EXT_SET.has(filename.slice(dot).toLowerCase());
+}
+
+function fmtSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function fileIconColor(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  if (["pdf", "doc", "docx"].includes(ext)) return "#3b82f6";
+  if (["jpg", "jpeg", "png", "tiff", "tif", "gif"].includes(ext)) return "#f59e0b";
+  if (["xlsx", "xls", "csv"].includes(ext)) return "#22c55e";
+  return "#555869";
+}
+
+function OcrChip({ doc }: { doc: Pick<DocumentMeta, "ocrStatus" | "ocrConfidence"> }) {
+  const { ocrStatus, ocrConfidence } = doc;
+  const pct = ocrConfidence != null ? Math.round(ocrConfidence * 100) : null;
+  if (!ocrStatus || ocrStatus === "NOT_APPLICABLE") return <span style={{ color: "#555869" }}>—</span>;
+  if (ocrStatus === "PENDING") return <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#555869" }}>Processing…</span>;
+  if (ocrStatus === "DONE") return (
+    <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#22c55e" }}>
+      <CheckCircle2 size={12} /> Verified{pct != null ? ` (${pct}%)` : ""}
+    </span>
+  );
+  if (ocrStatus === "AWAITING_APPROVAL") {
+    const isLow = ocrConfidence != null && ocrConfidence < 0.6;
+    return (
+      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: isLow ? "#fb923c" : "#f59e0b" }}>
+        <AlertCircle size={12} /> {pct != null ? `Low confidence (${pct}%)` : "Pending review"}
+      </span>
+    );
+  }
+  if (ocrStatus === "FAILED") return (
+    <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#ef4444" }}>
+      <XCircle size={12} /> OCR failed
+    </span>
+  );
+  return <span style={{ color: "#555869" }}>—</span>;
+}
+
+const DOC_TYPE_OPTIONS = [
+  { value: "All", label: "Type — all" },
+  { value: "FIR", label: "FIR" },
+  { value: "EVIDENCE_RECORD", label: "Evidence record" },
+  { value: "FORENSIC_REPORT", label: "Forensic report" },
+  { value: "WITNESS_STATEMENT", label: "Witness statement" },
+  { value: "INVESTIGATION_RECORD", label: "Investigation record" },
+  { value: "CHARGE_SHEET", label: "Charge sheet" },
+  { value: "COURT_FILING", label: "Court filing" },
+  { value: "POLICE_REPORT", label: "Police report" },
+  { value: "LEGAL_NOTICE", label: "Legal notice" },
+  { value: "JUDGMENT", label: "Judgment" },
+  { value: "OTHER", label: "Other" },
+];
 
 // ── Subcomponent: OverviewTab ──────────────────────────────────────────────────
 
@@ -820,6 +802,11 @@ export default function CaseDetailPage() {
   const [openSignForm, setOpenSignForm] = useState(false);
   const [menuDocId, setMenuDocId] = useState<string | null>(null);
   const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<DocumentMeta | null>(null);
+  const [docSearch, setDocSearch] = useState("");
+  const [docTypeFilter, setDocTypeFilter] = useState("All");
+  const [sortField, setSortField] = useState<"name" | "size" | "date">("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [showUploadPanel, setShowUploadPanel] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -868,6 +855,11 @@ export default function CaseDetailPage() {
     }
   }
 
+  function toggleSort(field: "name" | "size" | "date") {
+    if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortField(field); setSortDir("asc"); }
+  }
+
   if (loading) {
     return (
       <div style={{ padding: "40px", fontSize: "13px", color: "#555869" }}>
@@ -898,6 +890,22 @@ export default function CaseDetailPage() {
     { id: "overview",   label: "Overview",   icon: <LayoutDashboard size={15} /> },
     { id: "activity",   label: "Activity",   icon: <Clock size={15} /> },
   ];
+
+  const filteredSortedDocs = docs
+    .filter((d) => {
+      const q = docSearch.toLowerCase();
+      return (
+        (q === "" || d.filename.toLowerCase().includes(q)) &&
+        (docTypeFilter === "All" || d.docType === docTypeFilter)
+      );
+    })
+    .sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "name") cmp = a.filename.localeCompare(b.filename);
+      else if (sortField === "size") cmp = a.fileSizeBytes - b.fileSizeBytes;
+      else cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      return sortDir === "asc" ? cmp : -cmp;
+    });
 
   function handleMemberAdded(m: CaseMember) {
     setDetail((prev) =>
@@ -1082,233 +1090,195 @@ export default function CaseDetailPage() {
         )}
 
         {activeTab === "documents" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {(user?.role === "SUPER_ADMIN" || user?.role === "CASE_OFFICER") && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            {/* Toolbar */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+              {(user?.role === "SUPER_ADMIN" || user?.role === "CASE_OFFICER") && (
+                <button
+                  type="button"
+                  onClick={() => setShowUploadPanel((v) => !v)}
+                  style={{
+                    height: "34px", padding: "0 14px",
+                    display: "flex", alignItems: "center", gap: "8px",
+                    background: showUploadPanel ? "#2563eb" : "#3b82f6", color: "#ffffff",
+                    border: "none", borderRadius: "4px", fontSize: "14px", fontWeight: 500, cursor: "pointer",
+                  }}
+                >
+                  <Plus size={16} /> Upload Document
+                </button>
+              )}
+              <div style={{ width: "1px", height: "22px", background: "#2a2d35", margin: "0 4px" }} />
+              <div style={{
+                display: "flex", alignItems: "center", gap: "8px",
+                height: "34px", padding: "0 10px",
+                background: "#1e2028", border: "1px solid #2a2d35", borderRadius: "6px",
+                minWidth: "220px", color: "#555869",
+              }}>
+                <Search size={16} />
+                <input
+                  placeholder="Search documents…"
+                  value={docSearch}
+                  onChange={(e) => setDocSearch(e.target.value)}
+                  style={{ flex: 1, background: "transparent", border: "none", color: "#e8eaf0", fontSize: "14px", outline: "none" }}
+                />
+              </div>
+              <select
+                value={docTypeFilter}
+                onChange={(e) => setDocTypeFilter(e.target.value)}
+                aria-label="Document type filter"
+                style={{
+                  height: "34px", padding: "0 8px",
+                  background: "#1e2028", border: "1px solid #2a2d35", borderRadius: "6px",
+                  color: "#e8eaf0", fontSize: "13px",
+                }}
+              >
+                {DOC_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Upload panel */}
+            {showUploadPanel && (user?.role === "SUPER_ADMIN" || user?.role === "CASE_OFFICER") && (
               <DocumentUploader
                 caseId={detail.id}
                 onUploaded={(doc) => {
                   setDocs((prev) => [doc, ...prev]);
+                  setShowUploadPanel(false);
                 }}
               />
             )}
-            <div
-              style={{
-                background: "#111318",
-                border: "1px solid #2a2d35",
-                borderRadius: "8px",
-                overflow: "hidden",
-              }}
-            >
+
+            {/* Documents table */}
+            <div style={{ background: "#111318", border: "1px solid #2a2d35", borderRadius: "8px", overflow: "hidden" }}>
               {docsLoading ? (
-                <div style={{ padding: "24px", fontSize: "13px", color: "#555869" }}>
-                  Loading…
-                </div>
-              ) : docs.length === 0 ? (
-                <div
-                  style={{
-                    padding: "40px 24px",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: "10px",
-                    color: "#555869",
-                  }}
-                >
-                  <FileText size={32} />
-                  <div style={{ fontSize: "13px", color: "#8b8fa8" }}>No documents yet.</div>
-                </div>
+                <div style={{ padding: "24px", fontSize: "13px", color: "#555869" }}>Loading…</div>
               ) : (
-                <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", minWidth: "640px", borderCollapse: "collapse", fontSize: "13px" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid #2a2d35" }}>
-                      {["Filename", "Type", "Size", "Uploaded", ""].map((h, i) => (
-                        <th
-                          key={i}
-                          style={{
-                            padding: "10px 16px",
-                            textAlign: i === 4 ? "right" : "left",
-                            color: "#555869",
-                            fontWeight: 500,
-                          }}
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {docs.map((d) => (
-                      <tr
-                        key={d.id}
-                        style={{ borderBottom: "1px solid #1e2028" }}
-                      >
-                        <td style={{ padding: "10px 16px", color: "#e8eaf0", fontFamily: "monospace", fontSize: "12px" }}>
-                          {d.filename}
-                          <OcrStatusBadge doc={d} />
-                        </td>
-                        <td style={{ padding: "10px 16px", color: "#8b8fa8" }}>
-                          {d.docType.replace(/_/g, " ")}
-                        </td>
-                        <td style={{ padding: "10px 16px", color: "#8b8fa8" }}>
-                          {d.fileSizeBytes < 1024 * 1024
-                            ? `${(d.fileSizeBytes / 1024).toFixed(1)} KB`
-                            : `${(d.fileSizeBytes / 1024 / 1024).toFixed(1)} MB`}
-                        </td>
-                        <td style={{ padding: "10px 16px", color: "#555869" }}>
-                          {new Date(d.createdAt).toLocaleDateString()}
-                        </td>
-                        <td style={{ padding: "6px 16px", textAlign: "right" }}>
-                          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                            {/* Generate OCR — first-time scan */}
-                            {d.ocrStatus === "NOT_APPLICABLE" && isOcrSupported(d.filename) && (
-                              <button
-                                type="button"
-                                disabled={ocrGenerating === d.id}
-                                onClick={() => handleGenerateOcr(d)}
-                                style={{
-                                  height: "28px",
-                                  padding: "0 10px",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "5px",
-                                  background: "transparent",
-                                  border: "1px solid #2a2d35",
-                                  borderRadius: "4px",
-                                  color: "#8b8fa8",
-                                  fontSize: "12px",
-                                  cursor: ocrGenerating === d.id ? "not-allowed" : "pointer",
-                                  opacity: ocrGenerating === d.id ? 0.6 : 1,
-                                }}
-                              >
-                                {ocrGenerating === d.id ? "Scanning…" : "Generate OCR"}
-                              </button>
-                            )}
-                            {/* Review OCR — awaiting approval */}
-                            {d.ocrStatus === "AWAITING_APPROVAL" && (
-                              <button
-                                type="button"
-                                onClick={() => setOcrDoc(d)}
-                                style={{
-                                  height: "28px",
-                                  padding: "0 10px",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "5px",
-                                  background: "#3d2c08",
-                                  border: "1px solid #f59e0b",
-                                  borderRadius: "4px",
-                                  color: "#f59e0b",
-                                  fontSize: "12px",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                Review OCR
-                              </button>
-                            )}
-                            {/* View OCR — approved */}
-                            {d.ocrStatus === "DONE" && (
-                              <button
-                                type="button"
-                                onClick={() => setOcrDoc(d)}
-                                style={{
-                                  height: "28px",
-                                  padding: "0 10px",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "5px",
-                                  background: "#14391f",
-                                  border: "1px solid #22c55e",
-                                  borderRadius: "4px",
-                                  color: "#22c55e",
-                                  fontSize: "12px",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                View OCR
-                              </button>
-                            )}
-                            {/* Re-OCR — for failed / done / pending-review docs */}
-                            {(d.ocrStatus === "FAILED" || d.ocrStatus === "DONE" || d.ocrStatus === "AWAITING_APPROVAL") && isOcrSupported(d.filename) && (
-                              <button
-                                type="button"
-                                disabled={ocrGenerating === d.id}
-                                onClick={() => handleGenerateOcr(d, true)}
-                                style={{
-                                  height: "28px",
-                                  padding: "0 10px",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "5px",
-                                  background: "transparent",
-                                  border: "1px solid #2a2d35",
-                                  borderRadius: "4px",
-                                  color: "#555869",
-                                  fontSize: "12px",
-                                  cursor: ocrGenerating === d.id ? "not-allowed" : "pointer",
-                                  opacity: ocrGenerating === d.id ? 0.6 : 1,
-                                }}
-                              >
-                                {ocrGenerating === d.id ? "Scanning…" : "Re-OCR"}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => void downloadDocument(d.id, d.filename)}
-                              title="Download"
-                              style={{ height: "28px", width: "28px", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid #2a2d35", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}
-                            >
-                              <Download size={13} />
+                <>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", minWidth: "860px", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ background: "#14161c" }}>
+                          <th style={{ width: "40px", padding: "10px 0 10px 14px", borderBottom: "1px solid #2a2d35" }} />
+                          <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid #2a2d35" }}>
+                            <button type="button" onClick={() => toggleSort("name")} style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", padding: 0, color: "#8b8fa8", fontSize: "12px", fontWeight: 500, letterSpacing: "0.04em", cursor: "pointer" }}>
+                              FILENAME <ArrowUpDown size={14} />
                             </button>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); setSelectedDoc(d); setOpenSignForm(true); }}
-                              title="Sign document"
-                              style={{ height: "28px", width: "28px", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid #2a2d35", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}
-                            >
-                              <PenLine size={13} />
+                          </th>
+                          <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid #2a2d35", fontSize: "12px", fontWeight: 500, color: "#8b8fa8", letterSpacing: "0.04em" }}>TYPE</th>
+                          <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid #2a2d35" }}>
+                            <button type="button" onClick={() => toggleSort("size")} style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", padding: 0, color: "#8b8fa8", fontSize: "12px", fontWeight: 500, letterSpacing: "0.04em", cursor: "pointer" }}>
+                              SIZE <ArrowUpDown size={14} />
                             </button>
-                            {/* Three-dot expandable menu */}
-                            <div style={{ position: "relative" }}>
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); setMenuDocId(menuDocId === d.id ? null : d.id); }}
-                                title="More actions"
-                                style={{ height: "28px", width: "28px", display: "inline-flex", alignItems: "center", justifyContent: "center", background: menuDocId === d.id ? "#1e2028" : "transparent", border: "1px solid #2a2d35", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}
-                              >
-                                <MoreVertical size={13} />
-                              </button>
-                              {menuDocId === d.id && (
-                                <>
-                                  <div style={{ position: "fixed", inset: 0, zIndex: 49 }} onClick={() => setMenuDocId(null)} />
-                                  <div style={{ position: "absolute", right: 0, top: 32, zIndex: 50, background: "#1a1d24", border: "1px solid #2a2d35", borderRadius: "6px", minWidth: "168px", padding: "4px 0", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
-                                    <button
-                                      type="button"
-                                      onClick={() => { setMenuDocId(null); setSelectedDoc(d); setOpenSignForm(false); }}
-                                      style={{ width: "100%", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: "none", color: "#e8eaf0", fontSize: "13px", cursor: "pointer", textAlign: "left" }}
-                                    >
-                                      <ShieldCheck size={14} style={{ color: "#8b8fa8" }} /> View signatures
-                                    </button>
-                                    {(user?.role === "SUPER_ADMIN" || user?.role === "CASE_OFFICER") && (
-                                      <button
-                                        type="button"
-                                        onClick={() => { setMenuDocId(null); setConfirmDeleteDoc(d); }}
-                                        style={{ width: "100%", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: "none", color: "#ef4444", fontSize: "13px", cursor: "pointer", textAlign: "left" }}
-                                      >
-                                        <Trash2 size={14} /> Delete document
-                                      </button>
-                                    )}
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                </div>
+                          </th>
+                          <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid #2a2d35", fontSize: "12px", fontWeight: 500, color: "#8b8fa8", letterSpacing: "0.04em" }}>OCR</th>
+                          <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid #2a2d35" }}>
+                            <button type="button" onClick={() => toggleSort("date")} style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", padding: 0, color: "#8b8fa8", fontSize: "12px", fontWeight: 500, letterSpacing: "0.04em", cursor: "pointer" }}>
+                              UPLOADED <ArrowUpDown size={14} />
+                            </button>
+                          </th>
+                          <th style={{ textAlign: "right", padding: "10px 14px 10px 12px", borderBottom: "1px solid #2a2d35", fontSize: "12px", fontWeight: 500, color: "#8b8fa8", letterSpacing: "0.04em" }}>ACTIONS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredSortedDocs.map((d) => (
+                          <tr
+                            key={d.id}
+                            onClick={() => { setSelectedDoc(d); setOpenSignForm(false); }}
+                            style={{ background: selectedDoc?.id === d.id ? "#14161c" : "transparent", cursor: "pointer" }}
+                          >
+                            <td style={{ padding: "12px 0 12px 14px", borderBottom: "1px solid #1e2028", color: fileIconColor(d.filename) }}>
+                              <FileText size={16} />
+                            </td>
+                            <td style={{ padding: "12px", borderBottom: "1px solid #1e2028", maxWidth: "300px" }}>
+                              <span title={d.filename} style={{ display: "block", fontSize: "13px", color: "#e8eaf0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: "'JetBrains Mono', monospace" }}>
+                                {d.filename}
+                              </span>
+                            </td>
+                            <td style={{ padding: "12px", borderBottom: "1px solid #1e2028" }}>
+                              <span style={{ fontSize: "11px", letterSpacing: "0.05em", color: "#8b8fa8", textTransform: "uppercase" }}>
+                                {d.docType.replace(/_/g, " ")}
+                              </span>
+                            </td>
+                            <td style={{ padding: "12px", borderBottom: "1px solid #1e2028", fontSize: "13px", color: "#8b8fa8", whiteSpace: "nowrap" }}>
+                              {fmtSize(d.fileSizeBytes)}
+                            </td>
+                            <td style={{ padding: "12px", borderBottom: "1px solid #1e2028" }}>
+                              <OcrChip doc={d} />
+                            </td>
+                            <td style={{ padding: "12px", borderBottom: "1px solid #1e2028", fontSize: "13px", color: "#8b8fa8", whiteSpace: "nowrap" }}>
+                              {formatDate(d.createdAt)}
+                            </td>
+                            <td style={{ padding: "8px 14px 8px 12px", borderBottom: "1px solid #1e2028" }} onClick={(e) => e.stopPropagation()}>
+                              <div style={{ display: "flex", gap: "2px", justifyContent: "flex-end" }}>
+                                <button type="button" title="Download" onClick={() => void downloadDocument(d.id, d.filename)} style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}>
+                                  <Download size={16} />
+                                </button>
+                                <button type="button" title="Sign document" onClick={() => { setSelectedDoc(d); setOpenSignForm(true); }} style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}>
+                                  <PenLine size={16} />
+                                </button>
+                                <button type="button" title="Share" style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}>
+                                  <Share2 size={16} />
+                                </button>
+                                <div style={{ position: "relative" }}>
+                                  <button
+                                    type="button"
+                                    title="More actions"
+                                    onClick={(e) => { e.stopPropagation(); setMenuDocId(menuDocId === d.id ? null : d.id); }}
+                                    style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: menuDocId === d.id ? "#1e2028" : "transparent", border: "none", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}
+                                  >
+                                    <MoreVertical size={16} />
+                                  </button>
+                                  {menuDocId === d.id && (
+                                    <>
+                                      <div style={{ position: "fixed", inset: 0, zIndex: 49 }} onClick={() => setMenuDocId(null)} />
+                                      <div style={{ position: "absolute", right: 0, top: 36, zIndex: 50, background: "#1a1d24", border: "1px solid #2a2d35", borderRadius: "6px", minWidth: "180px", padding: "4px 0", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
+                                        <button type="button" onClick={() => { setMenuDocId(null); setSelectedDoc(d); setOpenSignForm(false); }} style={{ width: "100%", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: "none", color: "#e8eaf0", fontSize: "13px", cursor: "pointer", textAlign: "left" }}>
+                                          <ShieldCheck size={14} style={{ color: "#8b8fa8" }} /> View signatures
+                                        </button>
+                                        {d.ocrStatus === "NOT_APPLICABLE" && isOcrExt(d.filename) && (
+                                          <button type="button" disabled={ocrGenerating === d.id} onClick={() => { setMenuDocId(null); void handleGenerateOcr(d); }} style={{ width: "100%", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: "none", color: "#e8eaf0", fontSize: "13px", cursor: ocrGenerating === d.id ? "not-allowed" : "pointer", opacity: ocrGenerating === d.id ? 0.6 : 1, textAlign: "left" }}>
+                                            <FileText size={14} style={{ color: "#8b8fa8" }} /> {ocrGenerating === d.id ? "Scanning…" : "Generate OCR"}
+                                          </button>
+                                        )}
+                                        {(d.ocrStatus === "DONE" || d.ocrStatus === "AWAITING_APPROVAL") && (
+                                          <button type="button" onClick={() => { setMenuDocId(null); setOcrDoc(d); }} style={{ width: "100%", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: "none", color: d.ocrStatus === "AWAITING_APPROVAL" ? "#f59e0b" : "#e8eaf0", fontSize: "13px", cursor: "pointer", textAlign: "left" }}>
+                                            <FileText size={14} style={{ color: "#8b8fa8" }} /> {d.ocrStatus === "AWAITING_APPROVAL" ? "Review OCR" : "View OCR"}
+                                          </button>
+                                        )}
+                                        {(d.ocrStatus === "FAILED" || d.ocrStatus === "DONE" || d.ocrStatus === "AWAITING_APPROVAL") && isOcrExt(d.filename) && (
+                                          <button type="button" disabled={ocrGenerating === d.id} onClick={() => { setMenuDocId(null); void handleGenerateOcr(d, true); }} style={{ width: "100%", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: "none", color: "#e8eaf0", fontSize: "13px", cursor: ocrGenerating === d.id ? "not-allowed" : "pointer", opacity: ocrGenerating === d.id ? 0.6 : 1, textAlign: "left" }}>
+                                            <FileText size={14} style={{ color: "#8b8fa8" }} /> {ocrGenerating === d.id ? "Scanning…" : "Re-OCR"}
+                                          </button>
+                                        )}
+                                        {(user?.role === "SUPER_ADMIN" || user?.role === "CASE_OFFICER") && (
+                                          <>
+                                            <div style={{ height: "1px", background: "#2a2d35", margin: "4px 0" }} />
+                                            <button type="button" onClick={() => { setMenuDocId(null); setConfirmDeleteDoc(d); }} style={{ width: "100%", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: "none", color: "#ef4444", fontSize: "13px", cursor: "pointer", textAlign: "left" }}>
+                                              <Trash2 size={14} /> Delete document
+                                            </button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {filteredSortedDocs.length === 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "48px 24px", color: "#555869" }}>
+                      <FileText size={36} />
+                      <div style={{ fontSize: "14px", color: "#8b8fa8" }}>
+                        {docs.length === 0 ? "No documents yet." : "No documents match these filters."}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

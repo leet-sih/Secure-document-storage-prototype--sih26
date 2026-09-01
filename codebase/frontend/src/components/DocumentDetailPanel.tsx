@@ -110,6 +110,7 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
   const [signing, setSigning] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [ocrTab, setOcrTab] = useState<"formatted" | "raw">("formatted");
 
   const canSign = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "CASE_OFFICER" || currentUser?.role === "INVESTIGATOR";
   const alreadySigned = signatures.some(s => s.signer.id === currentUser?.id && !s.revoked_at);
@@ -207,6 +208,48 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
         <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid #2a2d35", paddingTop: 14 }}>
           <div style={{ fontSize: 11, letterSpacing: "0.06em", color: "#555869", fontFamily: "JetBrains Mono, monospace" }}>OCR STATUS</div>
           <OcrStatusRow doc={doc} />
+        </div>
+      )}
+
+      {/* OCR Text */}
+      {(doc.ocrFormattedText || doc.ocrRawText) && (doc.ocrStatus === "DONE" || doc.ocrStatus === "AWAITING_APPROVAL") && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid #2a2d35", paddingTop: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 11, letterSpacing: "0.06em", color: "#555869", fontFamily: "JetBrains Mono, monospace" }}>OCR TEXT</div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {doc.ocrFormattedText && (
+                <button
+                  type="button"
+                  onClick={() => setOcrTab("formatted")}
+                  style={{ height: 22, padding: "0 8px", fontSize: 11, background: ocrTab === "formatted" ? "#1e2028" : "transparent", border: `1px solid ${ocrTab === "formatted" ? "#3b82f6" : "#2a2d35"}`, borderRadius: 4, color: ocrTab === "formatted" ? "#3b82f6" : "#555869", cursor: "pointer" }}
+                >
+                  Formatted
+                </button>
+              )}
+              {doc.ocrRawText && (
+                <button
+                  type="button"
+                  onClick={() => setOcrTab("raw")}
+                  style={{ height: 22, padding: "0 8px", fontSize: 11, background: ocrTab === "raw" ? "#1e2028" : "transparent", border: `1px solid ${ocrTab === "raw" ? "#3b82f6" : "#2a2d35"}`, borderRadius: 4, color: ocrTab === "raw" ? "#3b82f6" : "#555869", cursor: "pointer" }}
+                >
+                  Raw
+                </button>
+              )}
+            </div>
+          </div>
+          <pre style={{
+            margin: 0, maxHeight: 200, overflowY: "auto", padding: "10px 12px",
+            background: "#0a0c10", border: "1px solid #2a2d35", borderRadius: 6,
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#8b8fa8",
+            whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6,
+          }}>
+            {ocrTab === "formatted" && doc.ocrFormattedText
+              ? doc.ocrFormattedText
+              : doc.ocrRawText ?? ""}
+          </pre>
+          {doc.ocrPageCount != null && (
+            <div style={{ fontSize: 11, color: "#555869" }}>{doc.ocrPageCount} page{doc.ocrPageCount !== 1 ? "s" : ""} extracted</div>
+          )}
         </div>
       )}
 
