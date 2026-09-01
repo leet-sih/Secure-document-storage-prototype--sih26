@@ -1,21 +1,24 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
+  ArrowLeftRight,
   BadgeCheck,
   Clock,
+  Download,
   FileText,
   LayoutDashboard,
   Plus,
   Trash2,
   Users,
-  ArrowLeftRight,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import AddMemberModal from "../components/AddMemberModal";
 import ConfirmModal from "../components/ConfirmModal";
+import DocumentUploader from "../components/DocumentUploader";
 import TransferCaseModal from "../components/TransferCaseModal";
 import { getCase, getTimeline, patchCase, removeMember } from "../lib/caseApi";
+import { downloadDocument, fetchCaseDocs } from "../lib/documentApi";
 import { useAuth } from "../store/AuthContext";
 import type {
   CaseDetail,
@@ -23,6 +26,7 @@ import type {
   CaseMemberRole,
   CasePriority,
   CaseStatus,
+  DocumentMeta,
   TimelineEvent,
 } from "../types";
 
@@ -601,7 +605,7 @@ function ActivityTab({ caseId }: ActivityTabProps) {
         </div>
       )}
 
-      {events.map((e) => {
+      {[...events].reverse().map((e) => {
         const color = eventColor(e.eventType);
         const actor = e.actor;
         return (
@@ -713,8 +717,10 @@ export default function CaseDetailPage() {
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [activeTab, setActiveTab] = useState<Tab>("documents");
   const [showTransfer, setShowTransfer] = useState(false);
+  const [docs, setDocs] = useState<DocumentMeta[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -722,9 +728,19 @@ export default function CaseDetailPage() {
       .then(setDetail)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load case."))
       .finally(() => setLoading(false));
+    fetchDocs();
   // Run once when id changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  function fetchDocs() {
+    if (!id) return;
+    setDocsLoading(true);
+    fetchCaseDocs(id)
+      .then(setDocs)
+      .catch(() => {/* non-fatal; docs list stays empty */})
+      .finally(() => setDocsLoading(false));
+  }
 
   if (loading) {
     return (
@@ -751,9 +767,9 @@ export default function CaseDetailPage() {
   type TabSpec = { id: Tab; label: string; icon: ReactNode };
 
   const tabs: TabSpec[] = [
-    { id: "overview",   label: "Overview",   icon: <LayoutDashboard size={15} /> },
     { id: "documents",  label: "Documents",  icon: <FileText size={15} /> },
     { id: "members",    label: "Members",    icon: <Users size={15} /> },
+    { id: "overview",   label: "Overview",   icon: <LayoutDashboard size={15} /> },
     { id: "activity",   label: "Activity",   icon: <Clock size={15} /> },
   ];
 
@@ -811,52 +827,18 @@ export default function CaseDetailPage() {
 
         {/* Case header */}
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          <div
+          <h1
             style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: "12px",
-              flexWrap: "wrap",
+              margin: 0,
+              fontSize: "24px",
+              fontWeight: 600,
+              color: "#e8eaf0",
+              lineHeight: 1.35,
+              maxWidth: "780px",
             }}
           >
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "24px",
-                fontWeight: 600,
-                color: "#e8eaf0",
-                lineHeight: 1.35,
-                maxWidth: "780px",
-                flex: 1,
-              }}
-            >
-              {detail.title}
-            </h1>
-
-            {canTransfer && detail.status !== "ARCHIVED" && detail.status !== "CLOSED" && (
-              <button
-                type="button"
-                onClick={() => setShowTransfer(true)}
-                style={{
-                  height: "34px",
-                  padding: "0 14px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  background: "#1a1d24",
-                  border: "1px solid #2a2d35",
-                  borderRadius: "4px",
-                  color: "#e8eaf0",
-                  fontSize: "13px",
-                  whiteSpace: "nowrap",
-                  cursor: "pointer",
-                  flex: "none",
-                }}
-              >
-                <ArrowLeftRight size={14} /> Transfer
-              </button>
-            )}
-          </div>
+            {detail.title}
+          </h1>
 
           <div
             style={{
@@ -901,6 +883,30 @@ export default function CaseDetailPage() {
               {detail.members.length !== 1 ? "s" : ""} · created{" "}
               {formatDate(detail.createdAt)}
             </span>
+            {canTransfer && detail.status !== "ARCHIVED" && detail.status !== "CLOSED" && (
+              <button
+                type="button"
+                onClick={() => setShowTransfer(true)}
+                style={{
+                  marginLeft: "auto",
+                  height: "30px",
+                  padding: "0 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  background: "#1a1d24",
+                  border: "1px solid #2a2d35",
+                  borderRadius: "4px",
+                  color: "#8b8fa8",
+                  fontSize: "12px",
+                  whiteSpace: "nowrap",
+                  cursor: "pointer",
+                  flex: "none",
+                }}
+              >
+                <ArrowLeftRight size={13} /> Transfer
+              </button>
+            )}
           </div>
         </div>
 
@@ -918,7 +924,10 @@ export default function CaseDetailPage() {
               <button
                 key={t.id}
                 type="button"
-                onClick={() => setActiveTab(t.id)}
+                onClick={() => {
+                  setActiveTab(t.id);
+                  if (t.id === "documents") fetchDocs();
+                }}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -945,25 +954,107 @@ export default function CaseDetailPage() {
         )}
 
         {activeTab === "documents" && (
-          <div
-            style={{
-              background: "#111318",
-              border: "1px solid #2a2d35",
-              borderRadius: "8px",
-              padding: "40px 24px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "10px",
-              color: "#555869",
-            }}
-          >
-            <FileText size={32} />
-            <div style={{ fontSize: "14px", color: "#8b8fa8" }}>
-              Document management — coming soon.
-            </div>
-            <div style={{ fontSize: "12px", color: "#555869" }}>
-              The document upload and viewer module is being integrated separately.
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {(user?.role === "SUPER_ADMIN" || user?.role === "CASE_OFFICER") && (
+              <DocumentUploader
+                caseId={detail.id}
+                onUploaded={(doc) => {
+                  setDocs((prev) => [doc, ...prev]);
+                }}
+              />
+            )}
+            <div
+              style={{
+                background: "#111318",
+                border: "1px solid #2a2d35",
+                borderRadius: "8px",
+                overflow: "hidden",
+              }}
+            >
+              {docsLoading ? (
+                <div style={{ padding: "24px", fontSize: "13px", color: "#555869" }}>
+                  Loading…
+                </div>
+              ) : docs.length === 0 ? (
+                <div
+                  style={{
+                    padding: "40px 24px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: "10px",
+                    color: "#555869",
+                  }}
+                >
+                  <FileText size={32} />
+                  <div style={{ fontSize: "13px", color: "#8b8fa8" }}>No documents yet.</div>
+                </div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #2a2d35" }}>
+                      {["Filename", "Type", "Size", "Uploaded", ""].map((h, i) => (
+                        <th
+                          key={i}
+                          style={{
+                            padding: "10px 16px",
+                            textAlign: i === 4 ? "right" : "left",
+                            color: "#555869",
+                            fontWeight: 500,
+                          }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {docs.map((d) => (
+                      <tr
+                        key={d.id}
+                        style={{ borderBottom: "1px solid #1e2028" }}
+                      >
+                        <td style={{ padding: "10px 16px", color: "#e8eaf0", fontFamily: "monospace", fontSize: "12px" }}>
+                          {d.filename}
+                        </td>
+                        <td style={{ padding: "10px 16px", color: "#8b8fa8" }}>
+                          {d.docType.replace(/_/g, " ")}
+                        </td>
+                        <td style={{ padding: "10px 16px", color: "#8b8fa8" }}>
+                          {d.fileSizeBytes < 1024 * 1024
+                            ? `${(d.fileSizeBytes / 1024).toFixed(1)} KB`
+                            : `${(d.fileSizeBytes / 1024 / 1024).toFixed(1)} MB`}
+                        </td>
+                        <td style={{ padding: "10px 16px", color: "#555869" }}>
+                          {new Date(d.createdAt).toLocaleDateString()}
+                        </td>
+                        <td style={{ padding: "6px 16px", textAlign: "right" }}>
+                          <button
+                            type="button"
+                            onClick={() => downloadDocument(d.id, d.filename)}
+                            style={{
+                              height: "28px",
+                              padding: "0 10px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              background: "#3b82f6",
+                              border: "none",
+                              borderRadius: "4px",
+                              color: "#ffffff",
+                              fontSize: "12px",
+                              fontWeight: 500,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <Download size={12} /> Download
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         )}

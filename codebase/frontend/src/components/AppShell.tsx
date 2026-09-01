@@ -7,6 +7,7 @@ import {
   LogOut,
   FolderOpen,
   Users,
+  Vault,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useAuth } from "../store/AuthContext";
@@ -51,6 +52,13 @@ export default function AppShell({ children }: Props) {
       bar: isActive("/cases") ? "#3b82f6" : "transparent",
       color: isActive("/cases") ? "#e8eaf0" : "#8b8fa8",
       go: () => navigate("/cases"),
+    },
+    {
+      label: "My Vault",
+      icon: <Vault size={16} />,
+      bar: isActive("/my-documents") ? "#3b82f6" : "transparent",
+      color: isActive("/my-documents") ? "#e8eaf0" : "#8b8fa8",
+      go: () => navigate("/my-documents"),
     },
     ...(user?.role === "SUPER_ADMIN"
       ? [

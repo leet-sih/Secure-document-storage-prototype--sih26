@@ -1,12 +1,6 @@
-"""
-DocumentUploader — case Documents tab ingest UI (design/PRAMAAN Prototype.dc.html).
-
-Unmounted until CaseDetailPage exists. POST multipart to /cases/:id/documents via XHR
-(progress). Client checks type + 500 MB before send. Does not decrypt.
-"""
-
 import { useRef, useState, type DragEvent, type FormEvent } from "react";
 
+import { toDocumentMeta, type DocumentDto } from "../lib/documentApi";
 import type { DocType, DocumentMeta } from "../types";
 
 const TOKEN_KEY = "dms_access_token";
@@ -42,7 +36,9 @@ const DOC_TYPES: { value: DocType; label: string }[] = [
 type Phase = "idle" | "uploading" | "done" | "error";
 
 export interface DocumentUploaderProps {
-  caseId: string;
+  /** Full API path to POST to. Defaults to case-scoped URL when caseId is given. */
+  uploadUrl?: string;
+  caseId?: string;
   onUploaded?: (doc: DocumentMeta) => void;
 }
 
@@ -51,7 +47,8 @@ function extOf(name: string): string {
   return i >= 0 ? name.slice(i).toLowerCase() : "";
 }
 
-export default function DocumentUploader({ caseId, onUploaded }: DocumentUploaderProps) {
+export default function DocumentUploader({ uploadUrl, caseId, onUploaded }: DocumentUploaderProps) {
+  const resolvedUrl = uploadUrl ?? `/api/v1/cases/${caseId}/documents`;
   const inputRef = useRef<HTMLInputElement>(null);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -128,7 +125,8 @@ export default function DocumentUploader({ caseId, onUploaded }: DocumentUploade
         setPhase("done");
         setPct(100);
         try {
-          onUploaded?.(JSON.parse(xhr.responseText) as DocumentMeta);
+          const dto = JSON.parse(xhr.responseText) as DocumentDto;
+          onUploaded?.(toDocumentMeta(dto));
         } catch {
           /* metadata optional for parent */
         }
@@ -143,7 +141,7 @@ export default function DocumentUploader({ caseId, onUploaded }: DocumentUploade
       }
     };
 
-    xhr.open("POST", `/api/v1/cases/${caseId}/documents`);
+    xhr.open("POST", resolvedUrl);
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.send(body);
   }

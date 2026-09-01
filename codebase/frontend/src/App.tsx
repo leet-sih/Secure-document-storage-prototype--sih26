@@ -22,6 +22,7 @@ import ChangePasswordPage from "./pages/ChangePasswordPage";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
 import MfaSetupPage from "./pages/MfaSetupPage";
+import PersonalVaultPage from "./pages/PersonalVaultPage";
 import UserAdminPage from "./pages/UserAdminPage";
 import { AuthProvider } from "./store/AuthContext";
 
@@ -69,6 +70,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <AppShell>
               <CaseDetailPage />
+            </AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-documents"
+        element={
+          <ProtectedRoute>
+            <AppShell>
+              <PersonalVaultPage />
             </AppShell>
           </ProtectedRoute>
         }

@@ -159,7 +159,7 @@ export type DocType =
 
 export interface DocumentMeta {
   id: string;
-  caseId: string;
+  caseId: string | null;
   filename: string;
   docType: DocType;
   fileSizeBytes: number;

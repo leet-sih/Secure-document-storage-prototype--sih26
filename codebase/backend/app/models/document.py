@@ -41,7 +41,7 @@ class Document(db.Model):
     __tablename__ = "documents"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    case_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cases.id"), nullable=False)
+    case_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cases.id"), nullable=True)
 
     filename = db.Column(db.Text, nullable=False)          # sanitized
     original_filename = db.Column(db.Text, nullable=False)  # as uploaded
