@@ -36,4 +36,5 @@ class DocumentSignature(db.Model):
     is_valid = db.Column(db.Boolean)                     # NULL until first verify
     last_verified_at = db.Column(db.DateTime(timezone=True))
     revoked_at = db.Column(db.DateTime(timezone=True))
+    comment = db.Column(db.Text, nullable=True)          # optional note from signer (max 500 chars enforced in schema)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

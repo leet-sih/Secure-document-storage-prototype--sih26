@@ -26,7 +26,7 @@ from app.core.rate_limit import UPLOAD_LIMITS
 from app.core.rbac import Role, require_roles
 from app.extensions import limiter
 from app.schemas.document_schemas import DocumentMetadataSchema, DocumentUploadSchema, OcrActionSchema
-from app.services import document_service
+from app.services import document_service, signature_service
 from app.services.audit_service import audit_service
 from app.services.document_service import IntegrityError
 
@@ -92,6 +92,20 @@ def upload_document(case_id, current_user):
             "auto_ocr": payload.get("auto_ocr", False),
         },
     )
+    # Auto-sign on upload: best-effort, never blocks the 201 response
+    try:
+        if current_user.role in ("SUPER_ADMIN", "CASE_OFFICER", "INVESTIGATOR"):
+            signature_service.sign_document(str(doc.id), current_user)
+            audit_service.record(
+                AuditEventType.DOCUMENT_SIGNED.value,
+                actor_user_id=current_user.id,
+                target_type="document",
+                target_id=doc.id,
+                case_id=str(case_id),
+                metadata={"auto": True},
+            )
+    except Exception:
+        pass
     return jsonify(_metadata_schema.dump(doc)), 201
 
 

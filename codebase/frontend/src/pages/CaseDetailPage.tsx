@@ -7,6 +7,7 @@ import {
   Download,
   FileText,
   LayoutDashboard,
+  PenLine,
   Plus,
   Trash2,
   Users,
@@ -14,6 +15,7 @@ import {
 import type { ReactNode } from "react";
 
 import AddMemberModal from "../components/AddMemberModal";
+import DocumentDetailPanel from "../components/DocumentDetailPanel";
 import ConfirmModal from "../components/ConfirmModal";
 import DocumentUploader from "../components/DocumentUploader";
 import OcrApprovalModal from "../components/OcrApprovalModal";
@@ -812,6 +814,8 @@ export default function CaseDetailPage() {
   const [docsLoading, setDocsLoading] = useState(false);
   const [ocrDoc, setOcrDoc] = useState<DocumentMeta | null>(null);
   const [ocrGenerating, setOcrGenerating] = useState<string | null>(null);
+  const [selectedDoc, setSelectedDoc] = useState<DocumentMeta | null>(null);
+  const [openSignForm, setOpenSignForm] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -1236,6 +1240,25 @@ export default function CaseDetailPage() {
                             )}
                             <button
                               type="button"
+                              onClick={(e) => { e.stopPropagation(); setSelectedDoc(d); setOpenSignForm(true); }}
+                              style={{
+                                height: "28px",
+                                padding: "0 10px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                background: "transparent",
+                                border: "1px solid #2a2d35",
+                                borderRadius: "4px",
+                                color: "#8b8fa8",
+                                fontSize: "12px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <PenLine size={12} /> Sign
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => downloadDocument(d.id, d.filename)}
                               style={{
                                 height: "28px",
@@ -1293,6 +1316,16 @@ export default function CaseDetailPage() {
           doc={ocrDoc}
           onUpdated={updateDoc}
           onClose={() => setOcrDoc(null)}
+        />
+      )}
+
+      {selectedDoc && (
+        <DocumentDetailPanel
+          doc={selectedDoc}
+          currentUser={user}
+          onClose={() => setSelectedDoc(null)}
+          initialSignFormOpen={openSignForm}
+          onDownload={() => downloadDocument(selectedDoc.id, selectedDoc.filename)}
         />
       )}
     </>
