@@ -77,6 +77,25 @@ def upload_document(case_id, current_user):
             "chunks": doc.total_chunks,
         },
     )
+
+    # Auto-sign: every upload is automatically signed by the uploader.
+    # Failure is best-effort — never blocks the upload 201 response.
+    try:
+        from app.services import signature_service as _ss
+        _ss.sign_document(str(doc.id), current_user)
+        audit_service.record(
+            AuditEventType.DOCUMENT_SIGNED.value,
+            actor_user_id=current_user.id,
+            target_type="document",
+            target_id=doc.id,
+            case_id=str(case_id),
+            ip_address=request.remote_addr,
+            metadata={"auto": True},
+        )
+    except Exception:
+        from flask import current_app
+        current_app.logger.exception("Auto-sign failed for document %s", doc.id)
+
     return jsonify(_metadata_schema.dump(doc)), 201
 
 

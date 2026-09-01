@@ -41,7 +41,8 @@ class User(db.Model):
     totp_secret_pending = db.Column(db.Text)    # unconfirmed setup secret
 
     # ── Signing ──
-    signing_public_key = db.Column(db.Text)     # hex Ed25519 public key (private key -> Vault)
+    signing_public_key = db.Column(db.Text)      # hex Ed25519 public key (private key never in DB)
+    signing_private_key_enc = db.Column(db.Text) # AES-256-GCM wrapped private key (hex iv||ct+tag)
 
     # ── State / lockout ──
     is_active = db.Column(db.Boolean, nullable=False, default=True)
