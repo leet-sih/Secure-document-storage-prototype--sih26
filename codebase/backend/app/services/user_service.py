@@ -105,9 +105,64 @@ def change_password(user: User, current_password: str, new_password: str) -> Non
     )
 
 
-def update_user(user_id: str, data: dict, actor):
-    raise NotImplementedError  # deferred — see docs/TODO.md
+def update_user(user_id: str, data: dict, actor) -> User:
+    user = get_user(user_id)
+
+    old_role = user.role
+    old_department_id = user.department_id
+
+    if str(user.id) == str(actor.id) and "role" in data and data["role"] != user.role:
+        raise APIError(400, "VALIDATION_ERROR", "Cannot change your own role")
+
+    if "department_id" in data:
+        department = db.session.get(Department, data["department_id"])
+        if department is None:
+            raise APIError(404, "NOT_FOUND", "Department not found")
+        user.department_id = data["department_id"]
+
+    if "role" in data:
+        user.role = data["role"]
+
+    if "full_name" in data:
+        user.full_name = data["full_name"]
+
+    db.session.commit()
+
+    if user.role != old_role:
+        audit_service.record(
+            AuditEventType.ROLE_CHANGED.value,
+            actor_user_id=actor.id,
+            target_type="user",
+            target_id=user.id,
+            metadata={"old_role": old_role, "new_role": user.role},
+        )
+
+    if user.department_id != old_department_id:
+        audit_service.record(
+            AuditEventType.DEPARTMENT_CHANGED.value,
+            actor_user_id=actor.id,
+            target_type="user",
+            target_id=user.id,
+        )
+
+    return user
 
 
 def deactivate_user(user_id: str, actor) -> None:
-    raise NotImplementedError  # deferred — see docs/TODO.md
+    user = get_user(user_id)
+
+    if str(user.id) == str(actor.id):
+        raise APIError(400, "VALIDATION_ERROR", "Cannot deactivate your own account")
+
+    if not user.is_active:
+        return
+
+    user.is_active = False
+    db.session.commit()
+
+    audit_service.record(
+        AuditEventType.USER_DEACTIVATED.value,
+        actor_user_id=actor.id,
+        target_type="user",
+        target_id=user.id,
+    )

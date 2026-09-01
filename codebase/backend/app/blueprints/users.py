@@ -13,12 +13,13 @@ Edit-role / deactivate row actions are deferred (see docs/TODO.md).
 
 from flask import Blueprint, request
 
-from app.core.rbac import Role, require_roles
+from app.core.rbac import Role, require_recent_mfa, require_roles
 from app.core.security import current_user_required, require_access_jwt
 from app.schemas.user_schemas import (
     DepartmentSchema,
     PasswordChangeSchema,
     UserCreateSchema,
+    UserPatchSchema,
     UserResponseSchema,
 )
 from app.models.department import Department
@@ -44,14 +45,32 @@ def change_password():
 
 
 @users_bp.get("")
-@require_roles(Role.SUPER_ADMIN, Role.CASE_OFFICER)
+@require_roles(Role.SUPER_ADMIN)
 def list_users(current_user):
     users = user_service.list_users()
     return {"users": UserResponseSchema(many=True).dump(users)}
 
 
+@users_bp.patch("/<uuid:user_id>")
+@require_roles(Role.SUPER_ADMIN)
+@require_recent_mfa()
+def update_user(user_id, current_user):
+    data = UserPatchSchema().load(request.get_json(silent=True) or {})
+    user = user_service.update_user(str(user_id), data, current_user)
+    return UserResponseSchema().dump(user)
+
+
+@users_bp.delete("/<uuid:user_id>")
+@require_roles(Role.SUPER_ADMIN)
+@require_recent_mfa()
+def deactivate_user(user_id, current_user):
+    user_service.deactivate_user(str(user_id), current_user)
+    return ("", 204)
+
+
 @users_bp.post("")
 @require_roles(Role.SUPER_ADMIN)
+@require_recent_mfa()
 def create_user(current_user):
     data = UserCreateSchema().load(request.get_json(silent=True) or {})
     user, temp_password = user_service.create_user(data, created_by=current_user.id)

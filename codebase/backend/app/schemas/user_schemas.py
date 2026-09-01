@@ -2,7 +2,7 @@
 user_schemas.py — user create/update/response.
 
 UserCreateSchema     -> POST /users            (admin; NO password field — server generates temp)
-UserPatchSchema      -> PATCH /users/{id}       (admin: role/dept/active/name)
+UserPatchSchema -> PATCH /users/{id} (admin: role/dept/name)
 UserSelfPatchSchema  -> PATCH /users/me         (self: name/phone ONLY — never role/dept)
 PasswordChangeSchema -> POST /users/me/change-password
 UserResponseSchema   -> serialization (never dumps password_hash/totp_secret)
@@ -30,7 +30,6 @@ class UserCreateSchema(_Base):
 class UserPatchSchema(_Base):
     role = fields.Str(validate=validate.OneOf(ROLES))
     department_id = fields.UUID()
-    is_active = fields.Bool()
     full_name = fields.Str(validate=validate.Length(min=2, max=200))
 
 
