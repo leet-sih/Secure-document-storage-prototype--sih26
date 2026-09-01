@@ -25,6 +25,12 @@ export interface DocumentDto {
   status: string;
   uploaded_by: string;
   created_at: string;
+  ocr_status?: string;
+  ocr_confidence?: number | null;
+  ocr_raw_text?: string | null;
+  ocr_formatted_text?: string | null;
+  ocr_page_count?: number | null;
+  ocr_detail?: string | null;
 }
 
 // ── Converter ─────────────────────────────────────────────────────────────────
@@ -39,6 +45,12 @@ export function toDocumentMeta(dto: DocumentDto): DocumentMeta {
     tags: dto.tags ?? [],
     status: dto.status,
     createdAt: dto.created_at,
+    ocrStatus: dto.ocr_status,
+    ocrConfidence: dto.ocr_confidence ?? null,
+    ocrRawText: dto.ocr_raw_text ?? null,
+    ocrFormattedText: dto.ocr_formatted_text ?? null,
+    ocrPageCount: dto.ocr_page_count ?? null,
+    ocrDetail: dto.ocr_detail ?? null,
   };
 }
 
@@ -52,6 +64,22 @@ export async function fetchCaseDocs(caseId: string): Promise<DocumentMeta[]> {
 export async function fetchPersonalDocs(): Promise<DocumentMeta[]> {
   const dtos = (await apiFetch("/me/documents")) as DocumentDto[];
   return dtos.map(toDocumentMeta);
+}
+
+export async function generateOcr(docId: string, force = false): Promise<DocumentMeta> {
+  const dto = (await apiFetch(`/documents/${docId}/ocr`, {
+    method: "POST",
+    body: JSON.stringify({ force }),
+  })) as DocumentDto;
+  return toDocumentMeta(dto);
+}
+
+export async function approveOcr(docId: string, action: "approve" | "dismiss"): Promise<DocumentMeta> {
+  const dto = (await apiFetch(`/documents/${docId}/ocr/approve`, {
+    method: "POST",
+    body: JSON.stringify({ action }),
+  })) as DocumentDto;
+  return toDocumentMeta(dto);
 }
 
 /** Fetch a document's decrypted bytes with auth and trigger a browser save-as. */

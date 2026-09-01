@@ -1,0 +1,57 @@
+# ─── OCR (feature_plans/ocr_plan.md) ───
+# Kept separate from requirements.txt so the API can be developed and run
+# without pulling image-processing wheels, and so OCR can be dropped from a
+# deployment that does not need it. Install with:
+#     pip install -r requirements-ocr.txt
+#
+# Nothing here makes a network call at runtime. app/core/ocr_engine forces
+# HF_HUB_OFFLINE/TRANSFORMERS_OFFLINE at import so no model library can either.
+
+numpy>=1.26,<3
+Pillow>=10.0,<12
+opencv-python-headless>=4.10,<5    # headless: no GUI libs, smaller image, server-safe
+pytesseract>=0.3.10,<0.4           # thin wrapper; the tesseract BINARY is a system package
+
+# PDF rasteriser. Deviates from the plan, which named pdf2image + PyMuPDF:
+# pypdfium2 bundles its own renderer, so there is no poppler-utils to install,
+# and it reads PDFs straight from bytes — which is what lets OCR run without
+# ever writing the decrypted document to disk. It also does the text-layer
+# check, so PyMuPDF is not needed either.
+pypdfium2>=4.25,<5
+
+
+# ─── System packages (not pip) ───
+# The tesseract binary and its language packs. Without these OCR reports
+# ocr_status=FAILED with "tesseract binary not installed" and uploads still
+# succeed — the document is encrypted and stored either way.
+#
+#   Debian/Ubuntu (add to the Dockerfile):
+#     apt-get install -y tesseract-ocr \
+#         tesseract-ocr-hin tesseract-ocr-tam tesseract-ocr-tel \
+#         tesseract-ocr-ben tesseract-ocr-guj \
+#         libglib2.0-0 libsm6 libxrender1 libxext6
+#
+#   macOS (dev):
+#     brew install tesseract tesseract-lang
+#
+# poppler-utils is NOT required — see the pypdfium2 note above.
+
+
+# ─── OPTIONAL: handwriting recognition ───
+# The plan notes handwritten FIRs as a core input, and Tesseract is weak on
+# handwriting. The engine can route low-confidence lines to TrOCR instead.
+#
+# This is OFF unless the weights are on disk: without them the pipeline runs
+# typed-only and marks handwritten lines low-confidence rather than failing. So
+# the prototype works with nothing below installed.
+#
+# Costs, before enabling it: ~2 GB installed, a 1.3 GB model download, and
+# 1-3 seconds per handwritten LINE on CPU. That is far too slow for the inline
+# upload path — enable it only with a GPU, or move OCR off the request first.
+#
+#   torch>=2.1,<3
+#   transformers>=4.38,<5
+#   sentencepiece>=0.1.99
+#
+# Then fetch the weights once on a networked machine and copy them to the
+# server; set OCR_MODEL_DIR to point at them.

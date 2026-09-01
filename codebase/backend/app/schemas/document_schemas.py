@@ -31,12 +31,17 @@ class DocumentUploadSchema(_Base):
         load_default=list,
         validate=validate.Length(max=10),
     )
+    auto_ocr = fields.Bool(load_default=False)
 
 
 class DocumentPatchSchema(_Base):
     title = fields.Str(validate=validate.Length(max=255))
     tags = fields.List(fields.Str(validate=validate.Regexp(r"^[a-z0-9\-]{1,50}$")),
                        validate=validate.Length(max=10))
+
+
+class OcrActionSchema(_Base):
+    action = fields.Str(required=True, validate=validate.OneOf(["approve", "dismiss"]))
 
 
 class DocumentMetadataSchema(Schema):
@@ -52,3 +57,10 @@ class DocumentMetadataSchema(Schema):
     status = fields.Str(dump_only=True)
     uploaded_by = fields.UUID(dump_only=True)
     created_at = fields.DateTime(dump_only=True)
+    # OCR fields
+    ocr_status = fields.Str(dump_only=True)
+    ocr_confidence = fields.Float(dump_only=True, allow_none=True)
+    ocr_raw_text = fields.Str(dump_only=True, allow_none=True)
+    ocr_formatted_text = fields.Str(dump_only=True, allow_none=True, attribute="search_text")
+    ocr_page_count = fields.Int(dump_only=True, allow_none=True)
+    ocr_detail = fields.Str(dump_only=True, allow_none=True)

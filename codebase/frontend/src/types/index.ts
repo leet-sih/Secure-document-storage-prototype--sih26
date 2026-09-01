@@ -166,6 +166,12 @@ export interface DocumentMeta {
   tags: string[];
   status: string;
   createdAt: string;
+  ocrStatus?: string;
+  ocrConfidence?: number | null;
+  ocrRawText?: string | null;
+  ocrFormattedText?: string | null;
+  ocrPageCount?: number | null;
+  ocrDetail?: string | null;
 }
 
 export interface AuditEventRow {

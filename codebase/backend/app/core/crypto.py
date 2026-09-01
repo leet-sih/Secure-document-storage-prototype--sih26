@@ -124,3 +124,40 @@ def decrypt_string(blob_hex: str, wrapping_secret: str, info: bytes) -> str:
     iv, ciphertext = raw[:12], raw[12:]
     key = _aes_key_from_secret(wrapping_secret, info)
     return decrypt_chunk(key, iv, ciphertext).decode("utf-8")
+
+
+# ──────────────────────────────────────────────────────────────────
+# Database text-field encryption (OCR text, future: annotations)
+# ──────────────────────────────────────────────────────────────────
+# OCR text is sensitive legal content that must not sit plaintext in PostgreSQL.
+# These helpers encrypt/decrypt arbitrary UTF-8 text under a key derived from the
+# document's existing master key, using a field-specific `info` tag so that
+# different fields on the same document are cryptographically independent.
+#
+# Storage format: hex( iv[12] || ciphertext_with_tag[n+16] )
+# Callers: document_service._encrypt_ocr_* / _decrypt_ocr_fields
+
+def encrypt_field(plaintext: str, master_key: bytes, info: bytes) -> str:
+    """Encrypt a text field under a sub-key derived from `master_key` with `info`.
+    RETURNS: hex(iv || ciphertext_with_tag)."""
+    field_key = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b"pramaan-field",
+        info=info,
+    ).derive(master_key)
+    iv, ciphertext = encrypt_chunk(field_key, plaintext.encode("utf-8"))
+    return (iv + ciphertext).hex()
+
+
+def decrypt_field(blob_hex: str, master_key: bytes, info: bytes) -> str:
+    """Reverse of encrypt_field. Raises InvalidTag if tampered or wrong key/info."""
+    raw = bytes.fromhex(blob_hex)
+    iv, ciphertext = raw[:12], raw[12:]
+    field_key = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b"pramaan-field",
+        info=info,
+    ).derive(master_key)
+    return decrypt_chunk(field_key, iv, ciphertext).decode("utf-8")
