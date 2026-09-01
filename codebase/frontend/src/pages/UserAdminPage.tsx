@@ -9,10 +9,8 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, FormEvent, ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
 
 import { apiFetch } from "../lib/apiClient";
-import { useAuthActions } from "../hooks/useAuth";
 import type { AdminUser, Department, Role } from "../types";
 
 const CREATE_ROLES: Role[] = ["INVESTIGATOR", "CASE_OFFICER", "PROSECUTOR", "AUDITOR", "SUPER_ADMIN"];
@@ -76,8 +74,6 @@ const fieldInput: CSSProperties = {
 };
 
 export default function UserAdminPage() {
-  const navigate = useNavigate();
-  const { logout } = useAuthActions();
 
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -109,38 +105,7 @@ export default function UserAdminPage() {
   }, []);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0c10", color: "#e8eaf0" }}>
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "14px 24px",
-          borderBottom: "1px solid #2a2d35",
-        }}
-      >
-        <span style={{ fontWeight: 700, letterSpacing: "0.14em" }}>PRAMAAN</span>
-        <span style={{ fontSize: 13, color: "#8b8fa8" }}>User Admin</span>
-        <button
-          type="button"
-          onClick={() => logout().then(() => navigate("/login", { replace: true }))}
-          style={{
-            marginLeft: "auto",
-            height: 32,
-            padding: "0 12px",
-            background: "#1a1d24",
-            border: "1px solid #2a2d35",
-            borderRadius: 4,
-            color: "#e8eaf0",
-            fontSize: 13,
-            cursor: "pointer",
-          }}
-        >
-          Sign out
-        </button>
-      </header>
-
-      <main style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>Users</h1>
           <button
@@ -249,8 +214,6 @@ export default function UserAdminPage() {
             </table>
           </div>
         </div>
-      </main>
-
       {modalOpen && (
         <CreateUserModal
           departments={departments}

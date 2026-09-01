@@ -40,6 +40,7 @@ yarn-error.log*
 
 # ── Local prototype storage — encrypted chunks + master keys. NEVER commit. ──
 data/
+data/chunks/
 **/backend/data/
 
 # ── Docker / data volumes ──

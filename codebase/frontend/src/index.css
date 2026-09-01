@@ -1,4 +1,84 @@
-/* index.css — Tailwind entry. Global base styles go under @layer base. */
+/* index.css — Tailwind entry + global responsive helpers */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+*, *::before, *::after { box-sizing: border-box; }
+
+button { -webkit-tap-highlight-color: transparent; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a2d35; border-radius: 3px; }
+
+/* Hide scrollbar track while keeping scrollability */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ─ OCR Markdown prose styles ─ */
+/* Applied inside .ocr-md (the formatted-text pane of OcrApprovalModal) */
+.ocr-md h1, .ocr-md h2, .ocr-md h3, .ocr-md h4 {
+  color: #e8eaf0;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 1.1em 0 0.4em;
+}
+.ocr-md h1 { font-size: 1.25em; border-bottom: 1px solid #2a2d35; padding-bottom: 0.3em; }
+.ocr-md h2 { font-size: 1.1em; }
+.ocr-md h3 { font-size: 1em; color: #c4c8e0; }
+.ocr-md h4 { font-size: 0.9em; color: #8b8fa8; }
+.ocr-md p  { margin: 0.6em 0; }
+.ocr-md ul, .ocr-md ol { margin: 0.5em 0 0.5em 1.4em; padding: 0; }
+.ocr-md li { margin: 0.25em 0; }
+.ocr-md strong { color: #e8eaf0; font-weight: 600; }
+.ocr-md em { color: #c4c8e0; font-style: italic; }
+.ocr-md blockquote {
+  margin: 0.75em 0;
+  padding: 0.5em 0.9em;
+  border-left: 3px solid #3b82f6;
+  background: #1a1d24;
+  color: #8b8fa8;
+  border-radius: 0 4px 4px 0;
+}
+.ocr-md hr {
+  border: none;
+  border-top: 1px solid #2a2d35;
+  margin: 1em 0;
+}
+.ocr-md table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  margin: 0.75em 0;
+}
+.ocr-md th, .ocr-md td {
+  padding: 6px 10px;
+  border: 1px solid #2a2d35;
+  text-align: left;
+}
+.ocr-md th { background: #1a1d24; color: #8b8fa8; font-weight: 500; }
+.ocr-md code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85em;
+  background: #1a1d24;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #93c5fd;
+}
+/* First child: remove top margin so text doesn't float away from the pane edge */
+.ocr-md > *:first-child { margin-top: 0; }
+
+/* Tighten shell content padding on mobile */
+@media (max-width: 640px) {
+  .shell-content { padding: 16px 12px 32px !important; }
+}
+
+/* Collapse 2-column label/value grid to single column on narrow screens */
+@media (max-width: 540px) {
+  .overview-grid {
+    grid-template-columns: 1fr !important;
+    gap: 6px 0 !important;
+  }
+  /* Hide user name + role in the top-bar button on very narrow screens */
+  .user-name-text { display: none !important; }
+}

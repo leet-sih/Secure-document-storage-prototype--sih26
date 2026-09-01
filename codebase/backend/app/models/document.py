@@ -14,8 +14,9 @@ status: UPLOADING -> ACTIVE | FAILED ; DELETED via is_deleted (soft delete keeps
 for legal audit).
 
 OCR columns (prototype scope, no Celery — see feature_plans/ocr_plan.md):
-  ocr_status: NOT_APPLICABLE | PENDING | DONE | LOW_CONFIDENCE | FAILED
-  ocr_confidence: 0.0-1.0 (Tesseract avg word confidence / 100)
+  ocr_status: NOT_APPLICABLE | PENDING | AWAITING_APPROVAL | DONE | FAILED
+  ocr_raw_text: unformatted Tesseract output; NULL after approval
+  ocr_confidence: 0.0-1.0 (Tesseract /100)
   ocr_language: tessdata language string used (e.g. "eng+hin+tam")
   ocr_page_count: number of pages processed
 
@@ -41,7 +42,7 @@ class Document(db.Model):
     __tablename__ = "documents"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    case_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cases.id"), nullable=False)
+    case_id = db.Column(UUID(as_uuid=True), db.ForeignKey("cases.id"), nullable=True)
 
     filename = db.Column(db.Text, nullable=False)          # sanitized
     original_filename = db.Column(db.Text, nullable=False)  # as uploaded
@@ -56,13 +57,15 @@ class Document(db.Model):
     tags = db.Column(ARRAY(db.Text), default=list)          # lowercase, [a-z0-9-]
 
     # ── Search / OCR (prototype scope — populated inline on upload; see ocr_plan.md) ──
-    search_text = db.Column(db.Text)                        # extracted plaintext for FTS
+    search_text = db.Column(db.Text)                        # LLM-formatted approved OCR text (FTS)
     search_vector = db.Column(TSVECTOR)                     # GIN-indexed; set by DB trigger
     ocr_status = db.Column(db.Text, default="NOT_APPLICABLE")
-    # Values: NOT_APPLICABLE | PENDING | DONE | LOW_CONFIDENCE | FAILED
+    # Values: NOT_APPLICABLE | PENDING | AWAITING_APPROVAL | DONE | FAILED
+    ocr_raw_text = db.Column(db.Text)                       # raw Tesseract output; cleared on approve
     ocr_confidence = db.Column(db.Float)                    # 0.0–1.0 (Tesseract /100)
     ocr_language = db.Column(db.Text, default="eng+hin")   # tessdata language pack string
     ocr_page_count = db.Column(db.Integer)                  # pages processed
+    ocr_detail = db.Column(db.Text)                         # human-readable reason for FAILED status
     embedding_status = db.Column(db.Text, default="NOT_APPLICABLE")
 
     uploaded_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
