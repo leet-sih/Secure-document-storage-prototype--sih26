@@ -1192,13 +1192,12 @@ export default function CaseDetailPage() {
             )}
 
             {/* Documents table */}
-            <div style={{ background: "#111318", border: "1px solid #2a2d35", borderRadius: "8px" }}>
-              {docsLoading ? (
-                <div style={{ padding: "24px", fontSize: "13px", color: "#555869" }}>Loading…</div>
-              ) : (
-                <>
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", minWidth: "860px", borderCollapse: "collapse" }}>
+            {docsLoading ? (
+              <div style={{ padding: "24px", fontSize: "13px", color: "#555869" }}>Loading…</div>
+            ) : (
+              <>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", minWidth: "860px", borderCollapse: "collapse" }}>
                       <thead>
                         <tr style={{ background: "#14161c" }}>
                           <th style={{ width: "40px", padding: "10px 0 10px 14px", borderBottom: "1px solid #2a2d35" }} />
@@ -1310,20 +1309,18 @@ export default function CaseDetailPage() {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
-                  </div>
-                  {filteredSortedDocs.length === 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "48px 24px", color: "#555869" }}>
-                      <FileText size={36} />
-                      <div style={{ fontSize: "14px", color: "#8b8fa8" }}>
-                        {docs.length === 0 ? "No documents yet." : "No documents match these filters."}
-                      </div>
+                  </table>
+                </div>
+                {filteredSortedDocs.length === 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "48px 24px", color: "#555869" }}>
+                    <FileText size={36} />
+                    <div style={{ fontSize: "14px", color: "#8b8fa8" }}>
+                      {docs.length === 0 ? "No documents yet." : "No documents match these filters."}
                     </div>
-                  )}
-                </>
-
-              )}
-            </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
