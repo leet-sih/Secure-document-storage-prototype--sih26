@@ -334,6 +334,7 @@ def download_document(document_id, requesting_user_id):
             target_type="document",
             target_id=doc.id,
             case_id=doc.case_id,
+            metadata={"filename": doc.filename},
         )
         raise
 
@@ -361,6 +362,7 @@ def check_document_integrity(document_id: str, requesting_user_id: str) -> "Docu
             target_type="document",
             target_id=doc.id,
             case_id=doc.case_id,
+            metadata={"filename": doc.filename},
         )
         raise
 

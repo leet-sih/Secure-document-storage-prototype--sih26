@@ -652,6 +652,8 @@ function eventLabel(e: TimelineEvent): string {
     case "CASE_UPDATED":        return "Updated case details";
     case "CASE_CLOSED":         return "Closed this case";
     case "CASE_ACCESSED":       return "Accessed case";
+    case "INTEGRITY_VIOLATION": return fn ? `${fn} failed integrity check` : "Integrity check failed";
+    case "INTEGRITY_CHECK_PASSED": return fn ? `${fn} passed integrity check` : "Integrity check passed";
     default: return e.eventType.replace(/_/g, " ").toLowerCase();
   }
 }
