@@ -7,25 +7,30 @@ document_chunks tables. Keep ALL raw crypto in core.crypto — this file only or
 PROTOTYPE NOTE: chunks go to the local filesystem (storage.chunk_store) and master keys to a
 local file KMS (core.kms). Same encryption as production — only the storage backend is simpler.
 
-UPLOAD  upload_document(...) -> Document
-DOWNLOAD / reconstruct / soft_delete / list — not this branch.
+UPLOAD   upload_document(...)
+PREVIEW  get_document_for_user + preview_document (reconstruct in RAM, PNG/text JSON)
+DOWNLOAD / list / soft_delete — not this branch.
 
 Full pipeline + edge cases: ../../feature_plans/chunked_document_storage_plan.md
 """
 
 from __future__ import annotations
 
+import base64
+import io
 import os
 import re
 import secrets
 from typing import BinaryIO
 from uuid import UUID, uuid4
 
+from cryptography.exceptions import InvalidTag
 from flask import current_app
 
 from app.core import kms
 from app.core.crypto import (
     compute_integrity_hash,
+    decrypt_chunk,
     derive_chunk_key,
     encrypt_chunk,
     generate_master_key,
@@ -48,6 +53,17 @@ ALLOWED_MIME_TYPES = {
     "video/mp4",
     "audio/wav",
 }
+
+PREVIEWABLE_MIME_TYPES = {
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/tiff",
+    "text/plain",
+}
+
+MAX_PREVIEW_PAGES = 20
+MAX_PREVIEW_TEXT_CHARS = 512 * 1024
 
 
 class IntegrityError(Exception):
@@ -257,11 +273,177 @@ def upload_document(
             master_key = None
 
 
-def download_document(document_id, requesting_user_id):
-    raise NotImplementedError
+def _as_uuid(value) -> UUID:
+    try:
+        return value if isinstance(value, UUID) else UUID(str(value))
+    except (ValueError, TypeError) as exc:
+        raise APIError(404, "NOT_FOUND", "Not found") from exc
+
+
+def _integrity_fail(message: str) -> None:
+    raise APIError(422, "INTEGRITY_VIOLATION", message)
+
+
+def get_document_for_user(document_id, requesting_user_id) -> Document:
+    """ACTIVE, not deleted, caller can access the parent case. Else 404."""
+    did = _as_uuid(document_id)
+    document = db.session.get(Document, did)
+    if document is None or document.is_deleted or document.status != "ACTIVE":
+        raise APIError(404, "NOT_FOUND", "Not found")
+    case = case_service.get_case_for_user(str(document.case_id), str(requesting_user_id))
+    if case is None:
+        raise APIError(404, "NOT_FOUND", "Not found")
+    return document
+
+
+def _reconstruct_verified(document: Document) -> bytes:
+    """Decrypt all chunks in RAM after full hash/GCM/integrity checks. Never writes plaintext."""
+    chunks = (
+        DocumentChunk.query.filter_by(document_id=document.id)
+        .order_by(DocumentChunk.chunk_index.asc())
+        .all()
+    )
+    if len(chunks) != document.total_chunks:
+        _integrity_fail("Document is incomplete — chunks missing")
+
+    try:
+        master_key = kms.get_key(str(document.id))
+    except FileNotFoundError as exc:
+        raise APIError(503, "KMS_UNAVAILABLE", "Key store unavailable") from exc
+    except Exception as exc:
+        raise APIError(503, "KMS_UNAVAILABLE", "Key store unavailable") from exc
+
+    running_hashes: list[str] = []
+    pieces: list[bytes] = []
+    try:
+        for expected_index, chunk in enumerate(chunks):
+            if chunk.chunk_index != expected_index:
+                _integrity_fail("Chunk order is inconsistent")
+            try:
+                ciphertext = chunk_store.get_chunk(chunk.storage_key)
+            except FileNotFoundError:
+                _integrity_fail("Document is incomplete — chunks missing")
+            if sha256_hex(ciphertext) != chunk.chunk_hash:
+                _integrity_fail("Chunk hash mismatch — storage tampering detected")
+            running_hashes.append(chunk.chunk_hash)
+            chunk_key = derive_chunk_key(master_key, str(document.id), chunk.chunk_index)
+            try:
+                iv = bytes.fromhex(chunk.iv_hex)
+                pieces.append(decrypt_chunk(chunk_key, iv, ciphertext))
+            except (InvalidTag, ValueError):
+                _integrity_fail("Chunk hash mismatch — storage tampering detected")
+
+        computed = compute_integrity_hash(running_hashes)
+        if computed != document.integrity_hash:
+            _integrity_fail("Document-level integrity check failed")
+        return b"".join(pieces)
+    finally:
+        master_key = None
 
 
 def reconstruct_bytes(document_id) -> bytes:
+    """Internal reconstruct. Caller must already have authorized access."""
+    did = _as_uuid(document_id)
+    document = db.session.get(Document, did)
+    if document is None:
+        raise APIError(404, "NOT_FOUND", "Not found")
+    return _reconstruct_verified(document)
+
+
+def _png_base64(png_bytes: bytes) -> str:
+    return base64.b64encode(png_bytes).decode("ascii")
+
+
+def _render_image_pages(plaintext: bytes) -> tuple[list[str], bool]:
+    from PIL import Image
+
+    pages: list[str] = []
+    truncated = False
+    with Image.open(io.BytesIO(plaintext)) as img:
+        frame = 0
+        while True:
+            if frame >= MAX_PREVIEW_PAGES:
+                truncated = True
+                break
+            converted = img.convert("RGB")
+            buf = io.BytesIO()
+            converted.save(buf, format="PNG")
+            pages.append(_png_base64(buf.getvalue()))
+            frame += 1
+            try:
+                img.seek(frame)
+            except EOFError:
+                break
+    return pages, truncated
+
+
+def _render_pdf_pages(plaintext: bytes) -> tuple[list[str], bool]:
+    import fitz
+
+    pages: list[str] = []
+    truncated = False
+    doc = fitz.open(stream=plaintext, filetype="pdf")
+    try:
+        total = doc.page_count
+        truncated = total > MAX_PREVIEW_PAGES
+        for i in range(min(total, MAX_PREVIEW_PAGES)):
+            pix = doc.load_page(i).get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
+            pages.append(_png_base64(pix.tobytes("png")))
+    finally:
+        doc.close()
+    return pages, truncated
+
+
+def _render_text(plaintext: bytes) -> tuple[str, bool]:
+    raw = plaintext.decode("utf-8", errors="replace").replace("\x00", "")
+    truncated = len(raw) > MAX_PREVIEW_TEXT_CHARS
+    if truncated:
+        raw = raw[:MAX_PREVIEW_TEXT_CHARS]
+    return raw, truncated
+
+
+def preview_document(document_id, requesting_user_id) -> dict:
+    document = get_document_for_user(document_id, requesting_user_id)
+    if document.mime_type not in PREVIEWABLE_MIME_TYPES:
+        raise APIError(400, "VALIDATION_ERROR", "Preview is not available for this file type")
+
+    plaintext = _reconstruct_verified(document)
+    try:
+        if document.mime_type == "text/plain":
+            text, truncated = _render_text(plaintext)
+            return {
+                "document_id": document.id,
+                "mode": "text",
+                "pages_png_base64": [],
+                "text": text,
+                "page_count": 1,
+                "truncated": truncated,
+                "filename": document.filename,
+                "mime_type": document.mime_type,
+            }
+        if document.mime_type == "application/pdf":
+            pages, truncated = _render_pdf_pages(plaintext)
+        else:
+            pages, truncated = _render_image_pages(plaintext)
+        return {
+            "document_id": document.id,
+            "mode": "pages",
+            "pages_png_base64": pages,
+            "text": None,
+            "page_count": len(pages),
+            "truncated": truncated,
+            "filename": document.filename,
+            "mime_type": document.mime_type,
+        }
+    except APIError:
+        raise
+    except Exception as exc:
+        raise APIError(400, "VALIDATION_ERROR", "Preview is not available for this file type") from exc
+    finally:
+        plaintext = b""
+
+
+def download_document(document_id, requesting_user_id):
     raise NotImplementedError
 
 

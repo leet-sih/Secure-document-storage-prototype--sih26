@@ -52,6 +52,31 @@ export interface DocumentMeta {
   createdAt: string;
 }
 
+/** Wire shape from DocumentMetadataSchema (snake_case). */
+export interface DocumentMetaApi {
+  id: string;
+  case_id: string;
+  filename: string;
+  title?: string | null;
+  mime_type: string;
+  doc_type: DocType;
+  file_size_bytes: number;
+  total_chunks: number;
+  tags: string[];
+  status: string;
+  uploaded_by: string;
+  created_at: string;
+}
+
+export interface DocumentPreview {
+  document_id: string;
+  mode: "pages" | "text";
+  pages_png_base64: string[];
+  text: string | null;
+  page_count: number;
+  truncated: boolean;
+}
+
 export interface AuditEventRow {
   id: number;
   eventType: string;

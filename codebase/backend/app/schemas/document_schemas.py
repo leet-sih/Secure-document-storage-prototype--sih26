@@ -52,3 +52,12 @@ class DocumentMetadataSchema(Schema):
     status = fields.Str(dump_only=True)
     uploaded_by = fields.UUID(dump_only=True)
     created_at = fields.DateTime(dump_only=True)
+
+
+class DocumentPreviewSchema(_Base):
+    document_id = fields.UUID(dump_only=True)
+    mode = fields.Str(dump_only=True, validate=validate.OneOf(["pages", "text"]))
+    pages_png_base64 = fields.List(fields.Str(), dump_only=True)
+    text = fields.Str(dump_only=True, allow_none=True)
+    page_count = fields.Int(dump_only=True)
+    truncated = fields.Bool(dump_only=True)

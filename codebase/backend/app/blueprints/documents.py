@@ -1,8 +1,7 @@
 """
 documents.py — upload / list / download / preview / delete. Prefix: /api/v1
 
-This branch implements POST /cases/{case_id}/documents only.
-See chunked_document_storage_plan.md + docs/EDGE_CASES.md sections 1 & 5.
+This branch: POST /cases/{case_id}/documents, GET /documents/{id}, GET /documents/{id}/preview.
 """
 
 from flask import Blueprint, request
@@ -12,14 +11,25 @@ from flask_limiter.util import get_remote_address
 
 from app.core.audit_events import AuditEventType
 from app.core.errors import APIError, error_response
-from app.core.rate_limit import UPLOAD_LIMITS
+from app.core.rate_limit import DEFAULT_LIMITS, UPLOAD_LIMITS
 from app.core.rbac import Role, require_roles
 from app.extensions import limiter
-from app.schemas.document_schemas import DocumentMetadataSchema, DocumentUploadSchema
+from app.schemas.document_schemas import (
+    DocumentMetadataSchema,
+    DocumentPreviewSchema,
+    DocumentUploadSchema,
+)
 from app.services import document_service
 from app.services.audit_service import audit_service
 
 documents_bp = Blueprint("documents", __name__)
+
+_VIEW_ROLES = (
+    Role.SUPER_ADMIN,
+    Role.CASE_OFFICER,
+    Role.INVESTIGATOR,
+    Role.PROSECUTOR,
+)
 
 
 @documents_bp.route("/cases/<case_id>/documents", methods=["POST"])
@@ -72,3 +82,53 @@ def upload_case_document(case_id, current_user):
         },
     )
     return DocumentMetadataSchema().dump(document), 201
+
+
+@documents_bp.route("/documents/<document_id>", methods=["GET"])
+@jwt_required()
+@require_roles(*_VIEW_ROLES)
+@limiter.limit(
+    DEFAULT_LIMITS,
+    key_func=lambda: str(get_jwt_identity() or get_remote_address()),
+)
+def get_document(document_id, current_user):
+    try:
+        document = document_service.get_document_for_user(document_id, current_user.id)
+    except APIError as exc:
+        return error_response(exc.status, exc.code, exc.message)
+    return DocumentMetadataSchema().dump(document), 200
+
+
+@documents_bp.route("/documents/<document_id>/preview", methods=["GET"])
+@jwt_required()
+@require_roles(*_VIEW_ROLES)
+@limiter.limit(
+    DEFAULT_LIMITS,
+    key_func=lambda: str(get_jwt_identity() or get_remote_address()),
+)
+def preview_document(document_id, current_user):
+    try:
+        payload = document_service.preview_document(document_id, current_user.id)
+    except APIError as exc:
+        if exc.code == "INTEGRITY_VIOLATION":
+            audit_service.record(
+                AuditEventType.INTEGRITY_VIOLATION.value,
+                actor_user_id=current_user.id,
+                target_type="document",
+                target_id=document_id,
+                metadata={"reason": "preview"},
+            )
+        return error_response(exc.status, exc.code, exc.message)
+
+    audit_service.record(
+        AuditEventType.DOCUMENT_PREVIEWED.value,
+        actor_user_id=current_user.id,
+        target_type="document",
+        target_id=payload["document_id"],
+        metadata={
+            "filename": payload.get("filename"),
+            "mime_type": payload.get("mime_type"),
+            "page_count": payload["page_count"],
+        },
+    )
+    return DocumentPreviewSchema().dump(payload), 200
