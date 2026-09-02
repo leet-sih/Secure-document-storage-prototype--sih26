@@ -502,7 +502,7 @@ def _render_image_pages(plaintext: bytes) -> tuple[list[str], bool]:
 
 
 def _render_pdf_pages(plaintext: bytes) -> tuple[list[str], bool]:
-    import fitz
+    import pymupdf as fitz
 
     pages: list[str] = []
     truncated = False

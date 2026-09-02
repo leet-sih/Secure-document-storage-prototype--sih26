@@ -36,8 +36,13 @@ class CaseShareCreateSchema(_Base):
     allow_download = fields.Bool(load_default=True)
 
 
+class OtpRequestSchema(_Base):
+    email = fields.Email(required=True)
+
+
 class ShareAccessSchema(_Base):
-    email = fields.Email(load_default=None)   # required only when the link has an email gate
+    email = fields.Email(load_default=None)
+    otp = fields.Str(load_default=None, validate=validate.Length(min=6, max=6))
 
 
 class ShareResponseSchema(Schema):

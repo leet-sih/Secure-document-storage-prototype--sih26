@@ -70,6 +70,10 @@ class Config:
     CHUNK_SIZE_BYTES = int(os.environ.get("CHUNK_SIZE_BYTES", 1048576))  # 1 MB
     MAX_CONTENT_LENGTH = MAX_FILE_SIZE_MB * 1024 * 1024
 
+    # ── Email OTP (Gmail SMTP — share link recipient verification) ──
+    GMAIL_USER = os.environ.get("GMAIL_USER", "")
+    GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+
     # ── CORS (allow the Vite dev server) ──
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
 

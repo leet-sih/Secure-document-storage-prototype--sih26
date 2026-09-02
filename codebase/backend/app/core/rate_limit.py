@@ -19,4 +19,5 @@ REFRESH_LIMITS = "20 per minute"               # per user
 UPLOAD_LIMITS = "10 per minute"                # per user
 SEARCH_LIMITS = "60 per minute"                # per user
 SHARE_ACCESS_LIMITS = "5 per hour;20 per day"  # per IP (public endpoint)
+OTP_REQUEST_LIMITS = "3 per hour;10 per day"   # per IP (OTP sends; tight to limit enumeration)
 DEFAULT_LIMITS = "120 per minute"              # per user, everything else

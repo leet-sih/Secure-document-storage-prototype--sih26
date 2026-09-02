@@ -14,7 +14,6 @@ flask-limiter==3.8.*           # in-memory rate limiting (no Redis for the proto
 bcrypt==4.2.*
 pyotp==2.9.*                   # TOTP MFA
 qrcode[pil]==8.0.*             # MFA setup QR codes
-cryptography==43.*             # AES-256-GCM, HKDF, Ed25519
 
 # ─── OCR ───
 pytesseract==0.3.*             # Tesseract Python binding
@@ -27,8 +26,7 @@ Pillow>=10.0                   # image I/O
 python-magic==0.4.*            # MIME detection by magic bytes
 Flask-Cors==5.0.*
 python-dotenv==1.0.*
-Pillow==10.*                   # re-encode image previews as PNG
-pymupdf==1.24.*                # PDF pages → PNG (no Poppler)
+pymupdf>=1.25.0                # PDF pages → PNG (no Poppler, no Pillow dep from 1.25+)
 
 # ─── Dev / test ───
 pytest==8.3.*

@@ -6,12 +6,14 @@ This is the ONLY document path reachable without an account. Aggressively rate-l
 ROUTES:
     GET  /{token}/info                  Public info (scope, filename/case, expiry, requires_email,
                                         allow_download). 410 if invalid/expired/revoked
-    POST /{token}/download              Validate + increment use_count + deliver:
+    POST /{token}/request-otp           Send a 6-digit OTP to the recipient's email. Must be called
+                                        before any access endpoint when email is provided.
+    POST /{token}/download              Validate email + OTP + increment use_count + deliver:
                                         - DOCUMENT scope: streams the decrypted file (403 if
                                           allow_download=False)
                                         - CASE_DOCUMENTS scope: JSON doc list + metadata
                                         - CASE_FULL scope: JSON case detail + members + doc list
-                                        410 expired/revoked/exhausted; 403 email mismatch
+                                        410 expired/revoked/exhausted; 403 email/OTP mismatch
     POST /{token}/preview               DOCUMENT scope only. Server-side PNG/text preview —
                                         never sends the raw file. Does not count against use_count.
     POST /{token}/file/{doc_id}         CASE scope only. Streams one document (403 if
@@ -21,19 +23,20 @@ ROUTES:
 Every access logs SHARE_LINK_ACCESSED or SHARE_LINK_PREVIEWED (IP, user_agent, share_id, scope).
 Integrity verified before any plaintext byte is sent.
 
-See feature_plans/specs/secure_sharing_spec.md + docs/EDGE_CASES.md §2.2.
+See feature_plans/specs/secure_sharing_spec.md + feature_plans/specs/share_otp_spec.md.
 """
 
 import uuid as _uuid
 
 from flask import Blueprint, Response, jsonify, request
 
+from app.core import email_otp
 from app.core.audit_events import AuditEventType
 from app.core.errors import APIError
-from app.core.rate_limit import SHARE_ACCESS_LIMITS
+from app.core.rate_limit import OTP_REQUEST_LIMITS, SHARE_ACCESS_LIMITS
 from app.extensions import db, limiter
 from app.models.document import Document
-from app.schemas.sharing_schemas import ShareAccessSchema
+from app.schemas.sharing_schemas import OtpRequestSchema, ShareAccessSchema
 from app.services import sharing_service
 from app.services.audit_service import audit_service
 from app.services.document_service import IntegrityError
@@ -41,18 +44,20 @@ from app.services.document_service import IntegrityError
 share_access_bp = Blueprint("share_access", __name__)
 
 _access_schema = ShareAccessSchema()
+_otp_request_schema = OtpRequestSchema()
 
 
-def _parse_email() -> str | None:
+def _parse_access() -> tuple[str | None, str | None]:
+    """Return (email, otp) from request body. Both default to None on parse failure."""
     body = request.get_json(silent=True) or {}
     try:
-        return _access_schema.load(body).get("email")
+        data = _access_schema.load(body)
+        return data.get("email"), data.get("otp")
     except Exception:
-        return None
+        return None, None
 
 
 def _log_failed_access(err: APIError, token: str, share_id: str | None = None) -> None:
-    """Emit UNAUTHORIZED_ACCESS_ATTEMPT for any rejected share access."""
     audit_service.record(
         AuditEventType.UNAUTHORIZED_ACCESS_ATTEMPT.value,
         ip_address=request.remote_addr,
@@ -74,12 +79,57 @@ def share_info(token: str):
     return jsonify(info), 200
 
 
+# ── OTP request ───────────────────────────────────────────────────────────────────
+
+@share_access_bp.route("/<token>/request-otp", methods=["POST"])
+@limiter.limit(OTP_REQUEST_LIMITS)
+def request_otp(token: str):
+    """Send a 6-digit OTP to the recipient. Email gate is validated before sending."""
+    body = request.get_json(silent=True) or {}
+    try:
+        data = _otp_request_schema.load(body)
+    except Exception:
+        raise APIError(400, "VALIDATION_ERROR", "A valid email address is required")
+
+    email: str = data["email"]
+
+    # Validate link + email gate without touching use_count
+    try:
+        link = sharing_service.validate_token_no_increment(token, email)
+    except APIError as exc:
+        _log_failed_access(exc, token)
+        raise
+
+    hint = "document" if link.share_scope == "DOCUMENT" else "case"
+    email_otp.generate_and_send(token, email, hint)
+
+    audit_service.record(
+        AuditEventType.SHARE_OTP_SENT.value,
+        ip_address=request.remote_addr,
+        metadata={
+            "share_id": str(link.id),
+            "scope": link.share_scope,
+            "token_prefix": token[:8],
+        },
+    )
+
+    return jsonify({"message": "OTP sent to your email. Valid for 10 minutes."}), 200
+
+
 # ── Download (all scopes) ─────────────────────────────────────────────────────────
 
 @share_access_bp.route("/<token>/download", methods=["POST"])
 @limiter.limit(SHARE_ACCESS_LIMITS)
 def share_download(token: str):
-    email = _parse_email()
+    email, otp = _parse_access()
+
+    # OTP verified in-memory BEFORE use_count is incremented (no wasted uses on wrong OTP)
+    try:
+        email_otp.verify_or_raise(token, email, otp)
+    except APIError as exc:
+        _log_failed_access(exc, token)
+        raise
+
     try:
         link = sharing_service.validate_token(token, email)
     except APIError as exc:
@@ -95,7 +145,6 @@ def share_download(token: str):
         metadata={
             "share_id": str(link.id),
             "scope": link.share_scope,
-            "email_used": email or "",
             "user_agent": request.user_agent.string,
         },
     )
@@ -128,7 +177,14 @@ def share_download(token: str):
 @share_access_bp.route("/<token>/file/<uuid:doc_id>", methods=["POST"])
 @limiter.limit(SHARE_ACCESS_LIMITS)
 def share_file_download(token: str, doc_id):
-    email = _parse_email()
+    email, otp = _parse_access()
+
+    try:
+        email_otp.verify_or_raise(token, email, otp)
+    except APIError as exc:
+        _log_failed_access(exc, token)
+        raise
+
     try:
         link = sharing_service.validate_token_no_increment(token, email)
     except APIError as exc:
@@ -155,7 +211,6 @@ def share_file_download(token: str, doc_id):
             "scope": link.share_scope,
             "sub_download": True,
             "doc_id": str(doc_id),
-            "email_used": email or "",
             "user_agent": request.user_agent.string,
         },
     )
@@ -171,8 +226,15 @@ def share_file_download(token: str, doc_id):
 @share_access_bp.route("/<token>/preview", methods=["POST"])
 @limiter.limit(SHARE_ACCESS_LIMITS)
 def share_preview(token: str):
-    """Server-side preview — DOCUMENT scope only. No use_count increment."""
-    email = _parse_email()
+    """Server-side preview — DOCUMENT scope only. Does not count against use_count."""
+    email, otp = _parse_access()
+
+    try:
+        email_otp.verify_or_raise(token, email, otp)
+    except APIError as exc:
+        _log_failed_access(exc, token)
+        raise
+
     try:
         link = sharing_service.validate_token_no_increment(token, email)
     except APIError as exc:
@@ -199,7 +261,6 @@ def share_preview(token: str):
             "share_id": str(link.id),
             "scope": link.share_scope,
             "filename": doc.filename,
-            "email_used": email or "",
         },
     )
     return jsonify(payload), 200
@@ -210,8 +271,15 @@ def share_preview(token: str):
 @share_access_bp.route("/<token>/file/<uuid:doc_id>/preview", methods=["POST"])
 @limiter.limit(SHARE_ACCESS_LIMITS)
 def share_file_preview(token: str, doc_id):
-    """Server-side preview of one file in a case share. No use_count increment."""
-    email = _parse_email()
+    """Server-side preview of one file in a case share. Does not count against use_count."""
+    email, otp = _parse_access()
+
+    try:
+        email_otp.verify_or_raise(token, email, otp)
+    except APIError as exc:
+        _log_failed_access(exc, token)
+        raise
+
     try:
         link = sharing_service.validate_token_no_increment(token, email)
     except APIError as exc:
@@ -240,7 +308,6 @@ def share_file_preview(token: str, doc_id):
             "share_id": str(link.id),
             "scope": link.share_scope,
             "filename": doc.filename,
-            "email_used": email or "",
         },
     )
     return jsonify(payload), 200
