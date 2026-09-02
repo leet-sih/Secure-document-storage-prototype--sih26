@@ -10,6 +10,7 @@ data/handlers via props, or use a hook).
 | `CaseCard.tsx` | Case summary card (status/priority badges, counts). |
 | `StatusBadge.tsx` | Color-coded case status pill. |
 | `DocumentUploader.tsx` | Drag-and-drop upload with XHR progress; client-side type/size check before POST. |
+| `DocumentDetailPanel.tsx` | Slide-in document metadata + server PNG/text preview; unmounted until CaseDetailPage. |
 | `DocumentList.tsx` | Table of documents with type/date filters + download/delete actions. |
 | `SignaturePanel.tsx` | List signatures + validity badges + "Verify" + "Sign" buttons. |
 | `ShareModal.tsx` | Create share link; `allowed_email` field required; show the raw URL ONCE with a copy button + "won't be shown again". |

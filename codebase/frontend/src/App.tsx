@@ -23,6 +23,7 @@ import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
 import MfaSetupPage from "./pages/MfaSetupPage";
 import PersonalVaultPage from "./pages/PersonalVaultPage";
+import ShareAccessPage from "./pages/ShareAccessPage";
 import UserAdminPage from "./pages/UserAdminPage";
 import { AuthProvider } from "./store/AuthContext";
 
@@ -38,6 +39,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/share/:token" element={<ShareAccessPage />} />
       <Route
         path="/change-password"
         element={

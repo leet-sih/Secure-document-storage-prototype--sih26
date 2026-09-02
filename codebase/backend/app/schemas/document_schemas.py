@@ -76,3 +76,14 @@ class DocumentMetadataSchema(Schema):
         from app.models.user import User
         user = db.session.get(User, obj.uploaded_by)
         return user.full_name if user else None
+
+
+class DocumentPreviewSchema(_Base):
+    document_id = fields.UUID(dump_only=True)
+    mode = fields.Str(dump_only=True, validate=validate.OneOf(["pages", "text"]))
+    pages_png_base64 = fields.List(fields.Str(), dump_only=True)
+    text = fields.Str(dump_only=True, allow_none=True)
+    page_count = fields.Int(dump_only=True)
+    truncated = fields.Bool(dump_only=True)
+    filename = fields.Str(dump_only=True)
+    mime_type = fields.Str(dump_only=True)

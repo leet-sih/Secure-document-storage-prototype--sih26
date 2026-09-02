@@ -24,6 +24,11 @@ UPLOAD  upload_document(...) -> Document
     4. integrity_hash = SHA256(ordered chunk hashes); Document -> ACTIVE; commit (atomic).
     5. On ANY failure: rollback DB (undoes doc + chunks + wrapped key) + delete written chunks.
 
+PREVIEW preview_document(document_id, requesting_user_id) -> dict
+    Reconstruct all chunks in RAM, run full integrity checks, render PDF/image as PNG pages
+    or text/plain as JSON text. preview_document_public(document) is the unauthenticated
+    variant used by share access endpoints (auth done by token validation).
+
 DOWNLOAD  download_document(document_id, requesting_user_id) -> (Document, byte_iterator)
     Loads doc; case access (else 404); PRE-VERIFY every chunk (SHA256 + GCM + overall
     integrity_hash) BEFORE yielding a single byte; then stream reconstructed plaintext.
@@ -35,10 +40,13 @@ list_documents(case_id, requesting_user_id) -> list
 Full pipeline + edge cases: feature_plans/specs/document_encryption_keystore_spec.md
 """
 
+import base64
+import io
 import os
 import re
 import secrets
 from datetime import datetime, timezone
+from uuid import UUID
 
 from cryptography.exceptions import InvalidTag
 from flask import current_app
@@ -69,6 +77,17 @@ ALLOWED_MIME_TYPES = {
 }
 
 _MAGIC_SNIFF_BYTES = 2048
+
+PREVIEWABLE_MIME_TYPES = {
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/tiff",
+    "text/plain",
+}
+
+MAX_PREVIEW_PAGES = 20
+MAX_PREVIEW_TEXT_CHARS = 512 * 1024
 
 
 class IntegrityError(Exception):
@@ -325,9 +344,6 @@ def download_document(document_id, requesting_user_id):
     try:
         parts = _verify_and_decrypt(doc)
     except IntegrityError:
-        # Security event — recorded here (in the service) where tampering is detected, per the
-        # exception in the services/__init__.py audit rule. The blueprint records the normal
-        # DOCUMENT_DOWNLOADED event only on success.
         audit_service.record(
             AuditEventType.INTEGRITY_VIOLATION.value,
             actor_user_id=requesting_user_id,
@@ -377,13 +393,189 @@ def check_document_integrity(document_id: str, requesting_user_id: str) -> "Docu
 
 
 def reconstruct_bytes(document_id) -> bytes:
-    """Server-side plaintext hook (for OCR/preview/search). Same integrity verification as
-    download, but NO case-access check — callers are internal, trusted server code.
-    RETURNS: the full decrypted document bytes."""
+    """Server-side plaintext hook (OCR/search). NO case-access check — internal only."""
     doc = db.session.get(Document, document_id)
     if doc is None or doc.is_deleted:
         raise APIError(404, "NOT_FOUND", "Document not found")
     return b"".join(_verify_and_decrypt(doc))
+
+
+# ── Preview (in-memory reconstruct → PNG pages / text JSON) ─────────────────────
+
+def _as_uuid(value) -> UUID:
+    try:
+        return value if isinstance(value, UUID) else UUID(str(value))
+    except (ValueError, TypeError) as exc:
+        raise APIError(404, "NOT_FOUND", "Not found") from exc
+
+
+def _preview_integrity_fail(message: str) -> None:
+    raise APIError(422, "INTEGRITY_VIOLATION", message)
+
+
+def get_document_for_user(document_id, requesting_user_id) -> Document:
+    """Return ACTIVE, non-deleted document the caller can access. Else 404."""
+    did = _as_uuid(document_id)
+    document = db.session.get(Document, did)
+    if document is None or document.is_deleted or document.status != "ACTIVE":
+        raise APIError(404, "NOT_FOUND", "Not found")
+    if document.case_id is None:
+        if str(document.uploaded_by) != str(requesting_user_id):
+            raise APIError(404, "NOT_FOUND", "Not found")
+    else:
+        case = case_service.get_case_for_user(str(document.case_id), str(requesting_user_id))
+        if case is None:
+            raise APIError(404, "NOT_FOUND", "Not found")
+    return document
+
+
+def _reconstruct_verified(document: Document) -> bytes:
+    """Decrypt all chunks in RAM after full hash/GCM/integrity checks. Never writes plaintext."""
+    chunks = (
+        DocumentChunk.query.filter_by(document_id=document.id)
+        .order_by(DocumentChunk.chunk_index.asc())
+        .all()
+    )
+    if len(chunks) != document.total_chunks:
+        _preview_integrity_fail("Document is incomplete — chunks missing")
+
+    try:
+        master_key = kms.get_key(str(document.id))
+    except FileNotFoundError as exc:
+        raise APIError(503, "KMS_UNAVAILABLE", "Key store unavailable") from exc
+    except Exception as exc:
+        raise APIError(503, "KMS_UNAVAILABLE", "Key store unavailable") from exc
+
+    running_hashes: list[str] = []
+    pieces: list[bytes] = []
+    try:
+        for expected_index, chunk in enumerate(chunks):
+            if chunk.chunk_index != expected_index:
+                _preview_integrity_fail("Chunk order is inconsistent")
+            try:
+                ciphertext = chunk_store.get_chunk(chunk.storage_key)
+            except FileNotFoundError:
+                _preview_integrity_fail("Document is incomplete — chunks missing")
+            if crypto.sha256_hex(ciphertext) != chunk.chunk_hash:
+                _preview_integrity_fail("Chunk hash mismatch — storage tampering detected")
+            running_hashes.append(chunk.chunk_hash)
+            chunk_key = crypto.derive_chunk_key(master_key, str(document.id), chunk.chunk_index)
+            try:
+                iv = bytes.fromhex(chunk.iv_hex)
+                pieces.append(crypto.decrypt_chunk(chunk_key, iv, ciphertext))
+            except (InvalidTag, ValueError):
+                _preview_integrity_fail("Chunk hash mismatch — storage tampering detected")
+
+        computed = crypto.compute_integrity_hash(running_hashes)
+        if computed != document.integrity_hash:
+            _preview_integrity_fail("Document-level integrity check failed")
+        return b"".join(pieces)
+    finally:
+        master_key = None
+
+
+def _png_base64(png_bytes: bytes) -> str:
+    return base64.b64encode(png_bytes).decode("ascii")
+
+
+def _render_image_pages(plaintext: bytes) -> tuple[list[str], bool]:
+    from PIL import Image
+
+    pages: list[str] = []
+    truncated = False
+    with Image.open(io.BytesIO(plaintext)) as img:
+        frame = 0
+        while True:
+            if frame >= MAX_PREVIEW_PAGES:
+                truncated = True
+                break
+            converted = img.convert("RGB")
+            buf = io.BytesIO()
+            converted.save(buf, format="PNG")
+            pages.append(_png_base64(buf.getvalue()))
+            frame += 1
+            try:
+                img.seek(frame)
+            except EOFError:
+                break
+    return pages, truncated
+
+
+def _render_pdf_pages(plaintext: bytes) -> tuple[list[str], bool]:
+    import fitz
+
+    pages: list[str] = []
+    truncated = False
+    doc = fitz.open(stream=plaintext, filetype="pdf")
+    try:
+        total = doc.page_count
+        truncated = total > MAX_PREVIEW_PAGES
+        for i in range(min(total, MAX_PREVIEW_PAGES)):
+            pix = doc.load_page(i).get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
+            pages.append(_png_base64(pix.tobytes("png")))
+    finally:
+        doc.close()
+    return pages, truncated
+
+
+def _render_text(plaintext: bytes) -> tuple[str, bool]:
+    raw = plaintext.decode("utf-8", errors="replace").replace("\x00", "")
+    truncated = len(raw) > MAX_PREVIEW_TEXT_CHARS
+    if truncated:
+        raw = raw[:MAX_PREVIEW_TEXT_CHARS]
+    return raw, truncated
+
+
+def _build_preview_payload(document: Document) -> dict:
+    """Shared render logic for authenticated and share-access preview."""
+    if document.mime_type not in PREVIEWABLE_MIME_TYPES:
+        raise APIError(400, "VALIDATION_ERROR", "Preview is not available for this file type")
+
+    plaintext = _reconstruct_verified(document)
+    try:
+        if document.mime_type == "text/plain":
+            text, truncated = _render_text(plaintext)
+            return {
+                "document_id": document.id,
+                "mode": "text",
+                "pages_png_base64": [],
+                "text": text,
+                "page_count": 1,
+                "truncated": truncated,
+                "filename": document.filename,
+                "mime_type": document.mime_type,
+            }
+        if document.mime_type == "application/pdf":
+            pages, truncated = _render_pdf_pages(plaintext)
+        else:
+            pages, truncated = _render_image_pages(plaintext)
+        return {
+            "document_id": document.id,
+            "mode": "pages",
+            "pages_png_base64": pages,
+            "text": None,
+            "page_count": len(pages),
+            "truncated": truncated,
+            "filename": document.filename,
+            "mime_type": document.mime_type,
+        }
+    except APIError:
+        raise
+    except Exception as exc:
+        raise APIError(400, "VALIDATION_ERROR", "Preview is not available for this file type") from exc
+    finally:
+        plaintext = b""
+
+
+def preview_document(document_id, requesting_user_id) -> dict:
+    """Preview for authenticated users (checks case/personal-vault access)."""
+    document = get_document_for_user(document_id, requesting_user_id)
+    return _build_preview_payload(document)
+
+
+def preview_document_public(document: Document) -> dict:
+    """Preview for share-access callers (document already auth'd by share token)."""
+    return _build_preview_payload(document)
 
 
 # ──────────────────────────────────────────────────────────────────

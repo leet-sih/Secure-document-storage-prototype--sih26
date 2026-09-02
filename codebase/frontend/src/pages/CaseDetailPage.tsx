@@ -34,6 +34,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import DocumentDetailPanel from "../components/DocumentDetailPanel";
 import DocumentUploader from "../components/DocumentUploader";
 import OcrApprovalModal from "../components/OcrApprovalModal";
+import ShareModal from "../components/ShareModal";
 import StepUpMfaModal from "../components/StepUpMfaModal";
 import TransferCaseModal from "../components/TransferCaseModal";
 import { getCase, getTimeline, patchCase, removeMember } from "../lib/caseApi";
@@ -631,6 +632,7 @@ function MembersTab({ detail, onMemberAdded, onMemberRemoved }: MembersTabProps)
 const CATEGORY_EVENTS: Record<string, string[]> = {
   Documents:  ["DOCUMENT_UPLOADED", "DOCUMENT_DOWNLOADED", "DOCUMENT_DELETED", "DOCUMENT_PREVIEWED"],
   Signatures: ["DOCUMENT_SIGNED", "SIGNATURE_VERIFIED", "SIGNATURE_REVOKED"],
+  Sharing:    ["DOCUMENT_SHARED", "CASE_SHARED", "SHARE_LINK_ACCESSED", "SHARE_LINK_REVOKED"],
   Members:    ["CASE_MEMBER_ADDED", "CASE_MEMBER_REMOVED"],
   Case:       ["CASE_CREATED", "CASE_UPDATED", "CASE_CLOSED", "CASE_ACCESSED"],
 };
@@ -654,6 +656,13 @@ function eventLabel(e: TimelineEvent): string {
     case "CASE_ACCESSED":       return "Accessed case";
     case "INTEGRITY_VIOLATION": return fn ? `${fn} failed integrity check` : "Integrity check failed";
     case "INTEGRITY_CHECK_PASSED": return fn ? `${fn} passed integrity check` : "Integrity check passed";
+    case "DOCUMENT_SHARED": return fn ? `Shared ${fn}` : "Shared document";
+    case "CASE_SHARED": {
+      const scope = m.share_scope ? String(m.share_scope) : "";
+      return scope === "CASE_FULL" ? "Shared full case" : "Shared case documents";
+    }
+    case "SHARE_LINK_ACCESSED": return "Share link accessed";
+    case "SHARE_LINK_REVOKED": return "Share link revoked";
     default: return e.eventType.replace(/_/g, " ").toLowerCase();
   }
 }
@@ -668,6 +677,7 @@ function eventIcon(eventType: string): ReactNode {
   if (eventType === "CASE_MEMBER_ADDED")   return <UserPlus size={13} />;
   if (eventType === "CASE_MEMBER_REMOVED") return <UserMinus size={13} />;
   if (eventType === "CASE_ACCESSED")       return <Eye size={13} />;
+  if (/SHARED|SHARE/.test(eventType))      return <Share2 size={13} />;
   return <Briefcase size={13} />;
 }
 
@@ -868,6 +878,8 @@ export default function CaseDetailPage() {
   const [sortField, setSortField] = useState<"name" | "size" | "date">("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [showUploadPanel, setShowUploadPanel] = useState(false);
+  const [shareDocTarget, setShareDocTarget] = useState<DocumentMeta | null>(null);
+  const [shareCaseScope, setShareCaseScope] = useState<"CASE_DOCUMENTS" | "CASE_FULL" | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -1088,6 +1100,37 @@ export default function CaseDetailPage() {
               {detail.members.length !== 1 ? "s" : ""} · created{" "}
               {formatDate(detail.createdAt)}
             </span>
+            {(user?.role === "SUPER_ADMIN" || user?.role === "CASE_OFFICER") && detail.status !== "ARCHIVED" && (
+              <>
+                <button
+                  type="button"
+                  title="Share all case documents"
+                  onClick={() => setShareCaseScope("CASE_DOCUMENTS")}
+                  style={{
+                    marginLeft: canTransfer ? "0" : "auto",
+                    height: "30px", padding: "0 12px",
+                    display: "flex", alignItems: "center", gap: "6px",
+                    background: "#1a1d24", border: "1px solid #2a2d35", borderRadius: "4px",
+                    color: "#8b8fa8", fontSize: "12px", whiteSpace: "nowrap", cursor: "pointer", flex: "none",
+                  }}
+                >
+                  <Share2 size={13} /> Share Docs
+                </button>
+                <button
+                  type="button"
+                  title="Share full case"
+                  onClick={() => setShareCaseScope("CASE_FULL")}
+                  style={{
+                    height: "30px", padding: "0 12px",
+                    display: "flex", alignItems: "center", gap: "6px",
+                    background: "#1a1d24", border: "1px solid #2a2d35", borderRadius: "4px",
+                    color: "#8b8fa8", fontSize: "12px", whiteSpace: "nowrap", cursor: "pointer", flex: "none",
+                  }}
+                >
+                  <Share2 size={13} /> Share Case
+                </button>
+              </>
+            )}
             {canTransfer && detail.status !== "ARCHIVED" && detail.status !== "CLOSED" && (
               <button
                 type="button"
@@ -1287,7 +1330,7 @@ export default function CaseDetailPage() {
                                 <button type="button" title="Sign document" onClick={() => { setSelectedDoc(d); setOpenSignForm(true); }} style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}>
                                   <PenLine size={16} />
                                 </button>
-                                <button type="button" title="Share" style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}>
+                                <button type="button" title="Share document" onClick={() => setShareDocTarget(d)} style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}>
                                   <Share2 size={16} />
                                 </button>
                                 <div style={{ position: "relative" }}>
@@ -1401,6 +1444,24 @@ export default function CaseDetailPage() {
           onOtpChange={setDeleteOtp}
           onVerify={() => void handleDeleteDoc(pendingDeleteDoc, deleteOtp)}
           onClose={() => { setPendingDeleteDoc(null); setDeleteOtp(""); setDeleteOtpError(""); }}
+        />
+      )}
+
+      {shareDocTarget && (
+        <ShareModal
+          scope="DOCUMENT"
+          documentId={shareDocTarget.id}
+          filename={shareDocTarget.filename}
+          onClose={() => setShareDocTarget(null)}
+        />
+      )}
+
+      {shareCaseScope && detail && (
+        <ShareModal
+          scope={shareCaseScope}
+          caseId={detail.id}
+          caseTitle={detail.title}
+          onClose={() => setShareCaseScope(null)}
         />
       )}
     </>
