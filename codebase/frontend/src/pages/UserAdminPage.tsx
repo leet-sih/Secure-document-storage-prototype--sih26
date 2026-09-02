@@ -10,7 +10,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, FormEvent, ReactNode } from "react";
 
-import { apiFetch } from "../lib/apiClient";
+import { ApiError, apiFetch } from "../lib/apiClient";
+import { stepUp } from "../lib/caseApi";
+import StepUpMfaModal from "../components/StepUpMfaModal";
+import { useAuth } from "../store/AuthContext";
 import type { AdminUser, Department, Role } from "../types";
 
 const CREATE_ROLES: Role[] = ["INVESTIGATOR", "CASE_OFFICER", "PROSECUTOR", "AUDITOR", "SUPER_ADMIN"];
@@ -79,6 +82,12 @@ export default function UserAdminPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+  const { user: currentUser, setSession } = useAuth();
+  const [showStepUp, setShowStepUp] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
 
   const deptName = useMemo(() => {
     const map = new Map(departments.map((d) => [d.id, d.name]));
@@ -90,18 +99,64 @@ export default function UserAdminPage() {
     setUsers(res.users.map(toAdminUser));
   }
 
-  async function toggleUserActive(user: AdminUser) {
-    if (user.isActive) {
-      await apiFetch(`/users/${user.id}`, {
-        method: "DELETE",
-      });
-    } else {
-      await apiFetch(`/users/${user.id}/activate`, {
-        method: "POST",
-      });
+  function requireStepUp(action: () => Promise<void>) {
+    setPendingAction(() => action);
+    setOtp("");
+    setOtpError("");
+    setShowStepUp(true);
+  }
+
+  async function toggleUserActive(user: AdminUser, skipMfaCheck = false) {
+    try {
+      if (user.isActive) {
+        await apiFetch(`/users/${user.id}`, {
+           method: "DELETE",
+        });
+      } else {
+        await apiFetch(`/users/${user.id}/activate`, {
+          method: "POST",
+        });
+      }
+
+      await loadUsers();
+    } catch (err) {
+      if (!skipMfaCheck && err instanceof ApiError && err.code === "MFA_REQUIRED") {
+        requireStepUp(() => toggleUserActive(user, true));
+        return;
+      }
+
+      setLoadError(
+        err instanceof Error ? err.message : "Could not update user status"
+      );
+    }
+  }
+
+  async function handleStepUpVerify() {
+    if (!otp || otp.length < 6) {
+      setOtpError("Enter the 6-digit code from your authenticator app.");
+      return;
     }
 
-    await loadUsers();
+    setOtpError("");
+
+    try {
+      const newToken = await stepUp(otp);
+      setSession(newToken, currentUser!);
+
+      setShowStepUp(false);
+      setOtp("");
+
+      const action = pendingAction;
+      setPendingAction(null);
+
+      if (action) {
+        await action();
+      }
+    } catch (err) {
+      setOtpError(
+        err instanceof Error ? err.message : "Verification failed."
+      );
+    }
   }
   
   useEffect(() => {
@@ -217,6 +272,24 @@ export default function UserAdminPage() {
                       {u.mfaEnabled ? "Enabled" : "—"}
                     </td>
                     <td style={{ ...td, textAlign: "right" }}>
+
+                      <button
+                        type="button"
+                        onClick={() => setEditingUser(u)}
+                        style={{
+                          height: 28,
+                          padding: "0 10px",
+                          marginRight: 6,
+                          background: "transparent",
+                          border: "1px solid #2a2d35",
+                          borderRadius: 4,
+                          color: "#e8eaf0",
+                          fontSize: 12,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Edit
+                      </button>
                       <button
                         type="button"
                         onClick={() => void toggleUserActive(u)}
@@ -252,6 +325,33 @@ export default function UserAdminPage() {
           departments={departments}
           onClose={() => setModalOpen(false)}
           onCreated={loadUsers}
+        />
+      )}
+      
+      {editingUser && (
+        <EditUserModal
+          user={editingUser}
+          departments={departments}
+          onClose={() => setEditingUser(null)}
+          onSaved={async () => {
+            await loadUsers();
+            setEditingUser(null);
+          }}
+        />
+      )}
+      {showStepUp && (
+        <StepUpMfaModal
+          label="User administration — requires MFA re-verification"
+          otp={otp}
+          error={otpError}
+          onOtpChange={setOtp}
+          onVerify={() => void handleStepUpVerify()}
+          onClose={() => {
+            setShowStepUp(false);
+            setOtp("");
+            setOtpError("");
+            setPendingAction(null);
+          }}
         />
       )}
     </div>
@@ -528,6 +628,171 @@ function CreateUserModal({
             </div>
           </form>
         )}
+      </div>
+    </div>
+  );
+}
+
+function EditUserModal({
+  user,
+  departments,
+  onClose,
+  onSaved,
+}: {
+  user: AdminUser;
+  departments: Department[];
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [role, setRole] = useState<Role>(user.role);
+  const [departmentId, setDepartmentId] = useState(user.departmentId);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+
+    try {
+      await apiFetch(`/users/${user.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          role,
+          department_id: departmentId,
+        }),
+      });
+
+      await onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update user");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 90,
+        background: "rgba(0,0,0,0.6)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <div
+        style={{
+          width: 440,
+          maxWidth: "100%",
+          background: "#1a1d24",
+          border: "1px solid #2a2d35",
+          borderRadius: 8,
+          padding: 22,
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 17, fontWeight: 600 }}>Edit user</span>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              marginLeft: "auto",
+              background: "transparent",
+              border: "none",
+              color: "#8b8fa8",
+              fontSize: 18,
+              cursor: "pointer",
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={{ fontSize: 13, color: "#8b8fa8" }}>
+          {user.fullName} · {user.email}
+        </div>
+
+        <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <ModalField id="eu-role" text="Role">
+            <select
+              id="eu-role"
+              value={role}
+              onChange={(e) => setRole(e.target.value as Role)}
+              style={fieldInput}
+            >
+              {CREATE_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </ModalField>
+
+          <ModalField id="eu-dept" text="Department">
+            <select
+              id="eu-dept"
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
+              style={fieldInput}
+            >
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </ModalField>
+
+          {error && (
+            <div style={{ fontSize: 13, color: "#ef4444" }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="submit"
+              disabled={busy}
+              style={{
+                height: 34,
+                padding: "0 16px",
+                background: "#3b82f6",
+                color: "#fff",
+                border: "none",
+                borderRadius: 4,
+                fontSize: 14,
+                cursor: busy ? "not-allowed" : "pointer",
+                opacity: busy ? 0.6 : 1,
+              }}
+            >
+              {busy ? "Saving…" : "Save"}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                height: 34,
+                padding: "0 14px",
+                background: "transparent",
+                border: "1px solid #2a2d35",
+                borderRadius: 4,
+                color: "#8b8fa8",
+                fontSize: 14,
+                cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
