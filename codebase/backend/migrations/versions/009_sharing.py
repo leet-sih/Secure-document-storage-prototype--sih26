@@ -1,7 +1,7 @@
 """Create document_share_links table (secure sharing feature).
 
 Revision ID: 009_sharing
-Revises: 008_audit_chain_revoke
+Revises: 008_audit_chain_revoke, 003_signature_comment
 Create Date: 2026-09-02
 
 Supports three sharing scopes:
@@ -21,7 +21,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "009_sharing"
-down_revision = "008_audit_chain_revoke"
+down_revision = ("008_audit_chain_revoke", "003_signature_comment")
 branch_labels = None
 depends_on = None
 
