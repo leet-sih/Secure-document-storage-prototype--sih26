@@ -25,7 +25,7 @@ from app.core.errors import APIError
 from app.core.rate_limit import UPLOAD_LIMITS
 from app.core.rbac import Role, require_roles
 from app.extensions import limiter
-from app.schemas.document_schemas import DocumentMetadataSchema, DocumentUploadSchema, OcrActionSchema
+from app.schemas.document_schemas import DocumentDeleteSchema, DocumentMetadataSchema, DocumentUploadSchema, OcrActionSchema
 from app.services import document_service, signature_service
 from app.services.audit_service import audit_service
 from app.services.document_service import IntegrityError
@@ -143,10 +143,26 @@ def download_document(document_id):
     )
 
 
+_delete_schema = DocumentDeleteSchema()
+
+
 @documents_bp.route("/documents/<uuid:document_id>", methods=["DELETE"])
 @jwt_required()
 @require_roles(Role.SUPER_ADMIN, Role.CASE_OFFICER)
 def delete_document(document_id, current_user):
+    from app.core import totp as _totp
+
+    data = _delete_schema.load(request.get_json(silent=True) or {})
+    if not current_user.totp_secret:
+        raise APIError(403, "FORBIDDEN", "MFA is not enabled on this account")
+    secret = _totp.decrypt_secret(current_user.totp_secret)
+    if not _totp.verify(secret, data["totp_code"]):
+        audit_service.record(
+            AuditEventType.MFA_STEP_UP_FAILED.value,
+            actor_user_id=current_user.id,
+        )
+        raise APIError(401, "UNAUTHORIZED", "Invalid TOTP code")
+
     doc = document_service.soft_delete(str(document_id), current_user)
     audit_service.record(
         AuditEventType.DOCUMENT_DELETED.value,
@@ -154,6 +170,7 @@ def delete_document(document_id, current_user):
         target_type="document",
         target_id=doc.id,
         case_id=doc.case_id,
+        metadata={"filename": doc.filename, "totp_verified": True},
     )
     return "", 204
 

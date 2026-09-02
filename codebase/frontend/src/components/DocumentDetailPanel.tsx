@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { BadgeCheck, Download, PenLine, RefreshCw, Share2, X } from "lucide-react";
+import { BadgeCheck, CheckCircle2, Download, PenLine, RefreshCw, Share2, X, XCircle } from "lucide-react";
 
 import type { CurrentUser, DocumentMeta } from "../types";
 import { useSignatures } from "../hooks/useSignatures";
@@ -46,7 +46,13 @@ function formatDateTime(iso: string): string {
   try {
     const d = new Date(iso);
     return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) +
-      " " + d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+      " · " + d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  } catch { return iso; }
+}
+
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
   } catch { return iso; }
 }
 
@@ -63,6 +69,39 @@ function SigStatusBadge({ sig }: { sig: Signature }) {
   return <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, color: "#555869", background: "#1a1d24" }}>UNVERIFIED</span>;
 }
 
+function OcrStatusRow({ doc }: { doc: DocumentMeta }) {
+  const { ocrStatus, ocrConfidence } = doc;
+  if (!ocrStatus || ocrStatus === "NOT_APPLICABLE" || ocrStatus === "PENDING") return null;
+
+  const pct = ocrConfidence != null ? Math.round(ocrConfidence * 100) : null;
+
+  if (ocrStatus === "DONE") {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#22c55e" }}>
+        <CheckCircle2 size={14} />
+        Verified{pct != null ? ` (${pct}%)` : ""}
+      </div>
+    );
+  }
+  if (ocrStatus === "AWAITING_APPROVAL") {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#f59e0b" }}>
+        <CheckCircle2 size={14} />
+        Pending review{pct != null ? ` · ${pct}%` : ""}
+      </div>
+    );
+  }
+  if (ocrStatus === "FAILED") {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#ef4444" }}>
+        <XCircle size={14} />
+        Failed{pct != null ? ` · ${pct}%` : ""}
+      </div>
+    );
+  }
+  return null;
+}
+
 export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownload, initialSignFormOpen = false }: Props) {
   const { signatures, loading: sigLoading, error: sigError, listSignatures, sign, verifySignatures, revokeSignature } = useSignatures(doc.id);
 
@@ -71,6 +110,7 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
   const [signing, setSigning] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [ocrTab, setOcrTab] = useState<"formatted" | "raw">("formatted");
 
   const canSign = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "CASE_OFFICER" || currentUser?.role === "INVESTIGATOR";
   const alreadySigned = signatures.some(s => s.signer.id === currentUser?.id && !s.revoked_at);
@@ -109,6 +149,12 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
     await revokeSignature(sigId);
   };
 
+  const truncatedHash = doc.integrityHash
+    ? doc.integrityHash.slice(0, 32) + "…"
+    : null;
+
+  const showOcrSection = doc.ocrStatus && doc.ocrStatus !== "NOT_APPLICABLE" && doc.ocrStatus !== "PENDING";
+
   return (
     <div style={{
       position: "fixed", right: 0, top: 56, bottom: 0,
@@ -141,9 +187,71 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
         <span style={{ color: "#e8eaf0" }}>{TYPE_LABEL[doc.docType] ?? doc.docType}</span>
         <span style={{ color: "#8b8fa8" }}>Size</span>
         <span style={{ color: "#e8eaf0" }}>{formatBytes(doc.fileSizeBytes)}</span>
+        {doc.totalChunks != null && (
+          <>
+            <span style={{ color: "#8b8fa8" }}>Chunks</span>
+            <span style={{ color: "#e8eaf0" }}>{doc.totalChunks}</span>
+          </>
+        )}
         <span style={{ color: "#8b8fa8" }}>Status</span>
         <span style={{ color: "#22c55e" }}>{doc.status}</span>
+        {truncatedHash && (
+          <>
+            <span style={{ color: "#8b8fa8" }}>SHA-256</span>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#555869", wordBreak: "break-all" }}>{truncatedHash}</span>
+          </>
+        )}
       </div>
+
+      {/* OCR Status */}
+      {showOcrSection && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid #2a2d35", paddingTop: 14 }}>
+          <div style={{ fontSize: 11, letterSpacing: "0.06em", color: "#555869", fontFamily: "JetBrains Mono, monospace" }}>OCR STATUS</div>
+          <OcrStatusRow doc={doc} />
+        </div>
+      )}
+
+      {/* OCR Text */}
+      {(doc.ocrFormattedText || doc.ocrRawText) && (doc.ocrStatus === "DONE" || doc.ocrStatus === "AWAITING_APPROVAL") && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid #2a2d35", paddingTop: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 11, letterSpacing: "0.06em", color: "#555869", fontFamily: "JetBrains Mono, monospace" }}>OCR TEXT</div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {doc.ocrFormattedText && (
+                <button
+                  type="button"
+                  onClick={() => setOcrTab("formatted")}
+                  style={{ height: 22, padding: "0 8px", fontSize: 11, background: ocrTab === "formatted" ? "#1e2028" : "transparent", border: `1px solid ${ocrTab === "formatted" ? "#3b82f6" : "#2a2d35"}`, borderRadius: 4, color: ocrTab === "formatted" ? "#3b82f6" : "#555869", cursor: "pointer" }}
+                >
+                  Formatted
+                </button>
+              )}
+              {doc.ocrRawText && (
+                <button
+                  type="button"
+                  onClick={() => setOcrTab("raw")}
+                  style={{ height: 22, padding: "0 8px", fontSize: 11, background: ocrTab === "raw" ? "#1e2028" : "transparent", border: `1px solid ${ocrTab === "raw" ? "#3b82f6" : "#2a2d35"}`, borderRadius: 4, color: ocrTab === "raw" ? "#3b82f6" : "#555869", cursor: "pointer" }}
+                >
+                  Raw
+                </button>
+              )}
+            </div>
+          </div>
+          <pre style={{
+            margin: 0, maxHeight: 200, overflowY: "auto", padding: "10px 12px",
+            background: "#0a0c10", border: "1px solid #2a2d35", borderRadius: 6,
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#8b8fa8",
+            whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6,
+          }}>
+            {ocrTab === "formatted" && doc.ocrFormattedText
+              ? doc.ocrFormattedText
+              : doc.ocrRawText ?? ""}
+          </pre>
+          {doc.ocrPageCount != null && (
+            <div style={{ fontSize: 11, color: "#555869" }}>{doc.ocrPageCount} page{doc.ocrPageCount !== 1 ? "s" : ""} extracted</div>
+          )}
+        </div>
+      )}
 
       {/* Signatures */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid #2a2d35", paddingTop: 16 }}>
@@ -273,10 +381,16 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
         </div>
       )}
 
-      {/* Uploaded date */}
+      {/* Uploaded by + date */}
       <div style={{ display: "grid", gridTemplateColumns: "84px 1fr", gap: "10px 12px", fontSize: 13, borderTop: "1px solid #2a2d35", paddingTop: 16 }}>
+        {doc.uploadedByName && (
+          <>
+            <span style={{ color: "#8b8fa8" }}>Uploaded by</span>
+            <span style={{ color: "#e8eaf0", fontWeight: 500 }}>{doc.uploadedByName}</span>
+          </>
+        )}
         <span style={{ color: "#8b8fa8" }}>Uploaded</span>
-        <span style={{ color: "#8b8fa8" }}>{formatDateTime(doc.createdAt)}</span>
+        <span style={{ color: "#8b8fa8" }}>{formatDate(doc.createdAt)}</span>
       </div>
 
       {/* Action buttons */}
