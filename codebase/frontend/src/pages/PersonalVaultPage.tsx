@@ -16,12 +16,14 @@ import {
   MoreVertical,
   Plus,
   Search,
+  Share2,
   Trash2,
   XCircle,
 } from "lucide-react";
 
 import DocumentUploader from "../components/DocumentUploader";
 import OcrApprovalModal from "../components/OcrApprovalModal";
+import ShareModal from "../components/ShareModal";
 import StepUpMfaModal from "../components/StepUpMfaModal";
 import {
   deleteDocument,
@@ -123,6 +125,7 @@ export default function PersonalVaultPage() {
   const [sortField, setSortField] = useState<"name" | "size" | "date">("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [showUploadPanel, setShowUploadPanel] = useState(false);
+  const [shareDocTarget, setShareDocTarget] = useState<DocumentMeta | null>(null);
 
   useEffect(() => {
     fetchPersonalDocs()
@@ -334,6 +337,9 @@ export default function PersonalVaultPage() {
                           <button type="button" title="Download" onClick={() => void downloadDocument(d.id, d.filename)} style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}>
                             <Download size={16} />
                           </button>
+                          <button type="button" title="Share document" onClick={() => setShareDocTarget(d)} style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", borderRadius: "4px", color: "#8b8fa8", cursor: "pointer" }}>
+                            <Share2 size={16} />
+                          </button>
                           <div style={{ position: "relative" }}>
                             <button
                               type="button"
@@ -419,6 +425,15 @@ export default function PersonalVaultPage() {
           onOtpChange={setDeleteOtp}
           onVerify={() => void handleDeleteDoc(pendingDeleteDoc, deleteOtp)}
           onClose={() => { setPendingDeleteDoc(null); setDeleteOtp(""); setDeleteOtpError(""); }}
+        />
+      )}
+
+      {shareDocTarget && (
+        <ShareModal
+          scope="DOCUMENT"
+          documentId={shareDocTarget.id}
+          filename={shareDocTarget.filename}
+          onClose={() => setShareDocTarget(null)}
         />
       )}
     </div>
