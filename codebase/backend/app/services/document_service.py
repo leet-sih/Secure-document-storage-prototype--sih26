@@ -344,6 +344,36 @@ def download_document(document_id, requesting_user_id):
     return doc, generate()
 
 
+def check_document_integrity(document_id: str, requesting_user_id: str) -> "Document":
+    """Verify chunk hashes and GCM tags without streaming to the client.
+    Records INTEGRITY_VIOLATION or INTEGRITY_CHECK_PASSED in the audit trail.
+    Raises IntegrityError (-> 422) on tamper, APIError(404) if not accessible."""
+    doc = db.session.get(Document, document_id)
+    if doc is None or doc.is_deleted or not _can_access(doc, requesting_user_id):
+        raise APIError(404, "NOT_FOUND", "Document not found")
+
+    try:
+        _verify_and_decrypt(doc)
+    except IntegrityError:
+        audit_service.record(
+            AuditEventType.INTEGRITY_VIOLATION.value,
+            actor_user_id=requesting_user_id,
+            target_type="document",
+            target_id=doc.id,
+            case_id=doc.case_id,
+        )
+        raise
+
+    audit_service.record(
+        AuditEventType.INTEGRITY_CHECK_PASSED.value,
+        actor_user_id=requesting_user_id,
+        target_type="document",
+        target_id=doc.id,
+        case_id=doc.case_id,
+    )
+    return doc
+
+
 def reconstruct_bytes(document_id) -> bytes:
     """Server-side plaintext hook (for OCR/preview/search). Same integrity verification as
     download, but NO case-access check — callers are internal, trusted server code.

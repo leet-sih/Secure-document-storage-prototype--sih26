@@ -153,6 +153,22 @@ def download_document(document_id, current_user):
     )
 
 
+@documents_bp.route("/documents/<uuid:document_id>/check-integrity", methods=["POST"])
+@require_roles(
+    Role.SUPER_ADMIN,
+    Role.CASE_OFFICER,
+    Role.INVESTIGATOR,
+    Role.PROSECUTOR,
+)
+def check_integrity(document_id, current_user):
+    user_id = str(current_user.id)
+    try:
+        document_service.check_document_integrity(str(document_id), user_id)
+    except IntegrityError:
+        raise APIError(422, "INTEGRITY_VIOLATION", "Document failed integrity verification")
+    return jsonify({"ok": True}), 200
+
+
 _delete_schema = DocumentDeleteSchema()
 
 

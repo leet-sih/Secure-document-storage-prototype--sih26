@@ -94,6 +94,11 @@ export async function deleteDocument(docId: string, totpCode: string): Promise<v
   });
 }
 
+/** Verify chunk hashes + GCM tags server-side without downloading the file. */
+export async function checkDocumentIntegrity(docId: string): Promise<void> {
+  await apiFetch(`/documents/${docId}/check-integrity`, { method: "POST" });
+}
+
 /** Fetch a document's decrypted bytes with auth and trigger a browser save-as. */
 export async function downloadDocument(docId: string, filename: string): Promise<void> {
   const token = localStorage.getItem(TOKEN_KEY);

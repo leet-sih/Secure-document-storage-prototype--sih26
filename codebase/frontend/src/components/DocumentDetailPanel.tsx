@@ -4,7 +4,8 @@
  */
 
 import { useEffect, useState } from "react";
-import { BadgeCheck, CheckCircle2, Download, PenLine, RefreshCw, Share2, X, XCircle } from "lucide-react";
+import { BadgeCheck, CheckCircle2, Download, PenLine, RefreshCw, Share2, Shield, ShieldAlert, ShieldCheck, X, XCircle } from "lucide-react";
+import { checkDocumentIntegrity } from "../lib/documentApi";
 
 import type { CurrentUser, DocumentMeta } from "../types";
 import { useSignatures } from "../hooks/useSignatures";
@@ -111,6 +112,8 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
   const [signError, setSignError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [ocrTab, setOcrTab] = useState<"formatted" | "raw">("formatted");
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [integrityState, setIntegrityState] = useState<"idle" | "checking" | "ok" | "violated">("idle");
 
   const canSign = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "CASE_OFFICER" || currentUser?.role === "INVESTIGATOR";
   const alreadySigned = signatures.some(s => s.signer.id === currentUser?.id && !s.revoked_at);
@@ -123,6 +126,8 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
     setShowSignForm(initialSignFormOpen);
     setComment("");
     setSignError(null);
+    setDownloadError(null);
+    setIntegrityState("idle");
   }, [initialSignFormOpen, doc.id]);
 
   const handleSign = async () => {
@@ -147,6 +152,25 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
   const handleRevoke = async (sigId: string) => {
     if (!confirm("Revoke this signature? The record is kept for audit purposes.")) return;
     await revokeSignature(sigId);
+  };
+
+  const handleDownload = async () => {
+    setDownloadError(null);
+    try {
+      await onDownload();
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : "Download failed");
+    }
+  };
+
+  const handleCheckIntegrity = async () => {
+    setIntegrityState("checking");
+    try {
+      await checkDocumentIntegrity(doc.id);
+      setIntegrityState("ok");
+    } catch (err) {
+      setIntegrityState("violated");
+    }
   };
 
   const truncatedHash = doc.integrityHash
@@ -394,29 +418,64 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
       </div>
 
       {/* Action buttons */}
-      <div style={{ display: "flex", gap: 8, marginTop: "auto", paddingTop: 16, borderTop: "1px solid #2a2d35" }}>
-        <button
-          type="button"
-          onClick={() => void onDownload()}
-          style={{ flex: 1, height: 34, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "#3b82f6", color: "#fff", border: "none", borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: "pointer" }}
-        >
-          <Download size={14} /> Download
-        </button>
-        {canSign && !alreadySigned && (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: "auto", paddingTop: 16, borderTop: "1px solid #2a2d35" }}>
+        <div style={{ display: "flex", gap: 8 }}>
           <button
             type="button"
-            onClick={() => setShowSignForm(v => !v)}
+            onClick={() => void handleDownload()}
+            style={{ flex: 1, height: 34, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "#3b82f6", color: "#fff", border: "none", borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: "pointer" }}
+          >
+            <Download size={14} /> Download
+          </button>
+          {canSign && !alreadySigned && (
+            <button
+              type="button"
+              onClick={() => setShowSignForm(v => !v)}
+              style={{ height: 34, padding: "0 12px", display: "flex", alignItems: "center", gap: 6, background: "#1a1d24", border: "1px solid #2a2d35", borderRadius: 4, color: "#e8eaf0", fontSize: 13, cursor: "pointer" }}
+            >
+              <PenLine size={14} /> Sign
+            </button>
+          )}
+          <button
+            type="button"
             style={{ height: 34, padding: "0 12px", display: "flex", alignItems: "center", gap: 6, background: "#1a1d24", border: "1px solid #2a2d35", borderRadius: 4, color: "#e8eaf0", fontSize: 13, cursor: "pointer" }}
           >
-            <PenLine size={14} /> Sign
+            <Share2 size={14} /> Share
           </button>
+        </div>
+
+        {/* Download error banner */}
+        {downloadError && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#3d1010", border: "1px solid #7f1d1d", borderRadius: 4, fontSize: 12, color: "#ef4444" }}>
+            <XCircle size={14} style={{ flexShrink: 0 }} />
+            {downloadError}
+          </div>
         )}
-        <button
-          type="button"
-          style={{ height: 34, padding: "0 12px", display: "flex", alignItems: "center", gap: 6, background: "#1a1d24", border: "1px solid #2a2d35", borderRadius: 4, color: "#e8eaf0", fontSize: 13, cursor: "pointer" }}
-        >
-          <Share2 size={14} /> Share
-        </button>
+
+        {/* Integrity check button + result */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => void handleCheckIntegrity()}
+            disabled={integrityState === "checking"}
+            style={{
+              height: 28, padding: "0 10px", display: "flex", alignItems: "center", gap: 5,
+              background: "#1a1d24", border: `1px solid ${integrityState === "ok" ? "#22c55e" : integrityState === "violated" ? "#ef4444" : "#2a2d35"}`,
+              borderRadius: 4, fontSize: 12,
+              color: integrityState === "ok" ? "#22c55e" : integrityState === "violated" ? "#ef4444" : "#8b8fa8",
+              cursor: integrityState === "checking" ? "default" : "pointer",
+            }}
+          >
+            {integrityState === "ok"
+              ? <><ShieldCheck size={13} /> Integrity OK</>
+              : integrityState === "violated"
+              ? <><ShieldAlert size={13} /> Integrity FAILED</>
+              : integrityState === "checking"
+              ? <><Shield size={13} /> Checking…</>
+              : <><Shield size={13} /> Check Integrity</>
+            }
+          </button>
+        </div>
       </div>
     </div>
   );
