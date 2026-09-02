@@ -114,12 +114,16 @@ Returns document metadata (no content).
 ### GET /cases/{id}/documents
 Returns document list with metadata. No content.
 
+### GET /documents/{id}
+Metadata only (`DocumentMetadataSchema`). Case members + SUPER_ADMIN. Unknown / no access / deleted → 404.
+
 ### GET /documents/{id}/download
 Streams decrypted file bytes.
 Sets `Content-Disposition: attachment`.
 
-### GET /documents/{id}/preview `[PDF/image only]`
-Returns server-rendered preview (PDF → PNG pages). Does not send raw bytes to client.
+### GET /documents/{id}/preview
+JSON (not original file bytes). PDF/JPEG/PNG/TIFF → PNG pages as base64. `text/plain` → `mode=text` for a `<pre>` (never HTML). Does not send the original evidence file to the client.
+Pre-verifies chunk hashes + GCM + integrity_hash; mismatch → 422 INTEGRITY_VIOLATION.
 
 ### DELETE /documents/{id} `[SUPER_ADMIN, CASE_OFFICER]`
 Soft delete. Chunks remain for audit purposes.

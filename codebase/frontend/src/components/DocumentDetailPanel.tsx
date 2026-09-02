@@ -1,11 +1,13 @@
 /**
- * DocumentDetailPanel — slide-in right panel showing doc metadata, signatures, and actions.
+ * DocumentDetailPanel — slide-in right panel showing doc metadata, signatures, preview, and actions.
  * Matches design/screens/DocumentDetailPanel.jsx exactly.
  */
 
 import { useEffect, useState } from "react";
-import { BadgeCheck, CheckCircle2, Download, PenLine, RefreshCw, Share2, Shield, ShieldAlert, ShieldCheck, X, XCircle } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import { BadgeCheck, CheckCircle2, Download, Expand, PenLine, RefreshCw, Share2, Shield, ShieldAlert, ShieldCheck, Shrink, X, XCircle } from "lucide-react";
 import { checkDocumentIntegrity } from "../lib/documentApi";
+import { useDocumentPreview } from "../hooks/useDocumentPreview";
 
 import type { CurrentUser, DocumentMeta } from "../types";
 import { useSignatures } from "../hooks/useSignatures";
@@ -114,6 +116,10 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
   const [ocrTab, setOcrTab] = useState<"formatted" | "raw">("formatted");
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [integrityState, setIntegrityState] = useState<"idle" | "checking" | "ok" | "violated">("idle");
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewFullscreen, setPreviewFullscreen] = useState(false);
+
+  const { preview, loading: previewLoading, error: previewError } = useDocumentPreview(showPreview ? doc.id : null);
 
   const canSign = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "CASE_OFFICER" || currentUser?.role === "INVESTIGATOR";
   const alreadySigned = signatures.some(s => s.signer.id === currentUser?.id && !s.revoked_at);
@@ -261,16 +267,24 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
               )}
             </div>
           </div>
-          <pre style={{
-            margin: 0, maxHeight: 200, overflowY: "auto", padding: "10px 12px",
-            background: "#0a0c10", border: "1px solid #2a2d35", borderRadius: 6,
-            fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#8b8fa8",
-            whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6,
-          }}>
-            {ocrTab === "formatted" && doc.ocrFormattedText
-              ? doc.ocrFormattedText
-              : doc.ocrRawText ?? ""}
-          </pre>
+          {ocrTab === "formatted" && doc.ocrFormattedText ? (
+            <div style={{
+              maxHeight: 240, overflowY: "auto", padding: "10px 14px",
+              background: "#0a0c10", border: "1px solid #2a2d35", borderRadius: 6,
+              fontSize: 12, color: "#e8eaf0", lineHeight: 1.7,
+            }}>
+              <ReactMarkdown>{doc.ocrFormattedText}</ReactMarkdown>
+            </div>
+          ) : (
+            <pre style={{
+              margin: 0, maxHeight: 240, overflowY: "auto", padding: "10px 12px",
+              background: "#0a0c10", border: "1px solid #2a2d35", borderRadius: 6,
+              fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#8b8fa8",
+              whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6,
+            }}>
+              {doc.ocrRawText ?? ""}
+            </pre>
+          )}
           {doc.ocrPageCount != null && (
             <div style={{ fontSize: 11, color: "#555869" }}>{doc.ocrPageCount} page{doc.ocrPageCount !== 1 ? "s" : ""} extracted</div>
           )}
@@ -417,6 +431,88 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
         <span style={{ color: "#8b8fa8" }}>{formatDate(doc.createdAt)}</span>
       </div>
 
+      {/* Preview section */}
+      {showPreview && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid #2a2d35", paddingTop: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 11, letterSpacing: "0.06em", color: "#555869", fontFamily: "JetBrains Mono, monospace" }}>PREVIEW</div>
+            <button
+              type="button"
+              onClick={() => setPreviewFullscreen(v => !v)}
+              title={previewFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              style={{ height: 24, width: 24, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", borderRadius: 4, color: "#8b8fa8", cursor: "pointer" }}
+            >
+              {previewFullscreen ? <Shrink size={13} /> : <Expand size={13} />}
+            </button>
+          </div>
+
+          {previewLoading && <div style={{ fontSize: 12, color: "#555869" }}>Loading preview…</div>}
+          {previewError && (
+            <div style={{ fontSize: 12, color: "#ef4444", padding: "8px 10px", background: "#3d1010", border: "1px solid #7f1d1d", borderRadius: 4 }}>
+              {previewError}
+            </div>
+          )}
+
+          {preview?.mode === "text" && preview.text != null && (
+            <div style={{
+              maxHeight: previewFullscreen ? undefined : 320, overflowY: "auto", padding: "10px 14px",
+              background: "#0a0c10", border: "1px solid #2a2d35", borderRadius: 6,
+              fontSize: 12, color: "#e8eaf0", lineHeight: 1.7,
+            }}>
+              <ReactMarkdown>{preview.text}</ReactMarkdown>
+            </div>
+          )}
+
+          {preview?.mode === "pages" && preview.pages_png_base64.map((b64, i) => (
+            <img
+              key={i}
+              alt={`Page ${i + 1}`}
+              src={`data:image/png;base64,${b64}`}
+              style={{ width: "100%", borderRadius: 6, border: "1px solid #2a2d35", display: "block" }}
+            />
+          ))}
+
+          {preview?.truncated && (
+            <div style={{ fontSize: 11, color: "#555869" }}>Preview truncated — {preview.page_count} page{preview.page_count !== 1 ? "s" : ""} shown</div>
+          )}
+        </div>
+      )}
+
+      {/* Fullscreen preview overlay */}
+      {showPreview && previewFullscreen && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 100,
+          background: "#0a0c10", overflowY: "auto", padding: 24,
+          display: "flex", flexDirection: "column", gap: 16,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: 900, margin: "0 auto", width: "100%" }}>
+            <span style={{ fontSize: 14, color: "#e8eaf0", fontWeight: 500 }}>{doc.filename}</span>
+            <button
+              type="button"
+              onClick={() => setPreviewFullscreen(false)}
+              style={{ height: 32, padding: "0 12px", display: "flex", alignItems: "center", gap: 6, background: "#1a1d24", border: "1px solid #2a2d35", borderRadius: 4, color: "#8b8fa8", fontSize: 13, cursor: "pointer" }}
+            >
+              <Shrink size={13} /> Exit fullscreen
+            </button>
+          </div>
+          <div style={{ maxWidth: 900, margin: "0 auto", width: "100%" }}>
+            {preview?.mode === "text" && preview.text != null && (
+              <div style={{ padding: "16px 20px", background: "#111318", border: "1px solid #2a2d35", borderRadius: 8, fontSize: 13, color: "#e8eaf0", lineHeight: 1.8 }}>
+                <ReactMarkdown>{preview.text}</ReactMarkdown>
+              </div>
+            )}
+            {preview?.mode === "pages" && preview.pages_png_base64.map((b64, i) => (
+              <img
+                key={i}
+                alt={`Page ${i + 1}`}
+                src={`data:image/png;base64,${b64}`}
+                style={{ width: "100%", marginBottom: 16, borderRadius: 6, border: "1px solid #2a2d35", display: "block" }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Action buttons */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: "auto", paddingTop: 16, borderTop: "1px solid #2a2d35" }}>
         <div style={{ display: "flex", gap: 8 }}>
@@ -426,6 +522,13 @@ export default function DocumentDetailPanel({ doc, currentUser, onClose, onDownl
             style={{ flex: 1, height: 34, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "#3b82f6", color: "#fff", border: "none", borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: "pointer" }}
           >
             <Download size={14} /> Download
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowPreview(v => !v)}
+            style={{ height: 34, padding: "0 12px", display: "flex", alignItems: "center", gap: 6, background: showPreview ? "#1e2028" : "#1a1d24", border: `1px solid ${showPreview ? "#3b82f6" : "#2a2d35"}`, borderRadius: 4, color: showPreview ? "#3b82f6" : "#8b8fa8", fontSize: 13, cursor: "pointer" }}
+          >
+            {previewLoading ? "Loading…" : showPreview ? "Hide" : "Preview"}
           </button>
           {canSign && !alreadySigned && (
             <button

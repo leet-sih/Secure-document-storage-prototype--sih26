@@ -177,6 +177,31 @@ export interface DocumentMeta {
   ocrDetail?: string | null;
 }
 
+/** Wire shape from DocumentMetadataSchema (snake_case). */
+export interface DocumentMetaApi {
+  id: string;
+  case_id: string;
+  filename: string;
+  title?: string | null;
+  mime_type: string;
+  doc_type: DocType;
+  file_size_bytes: number;
+  total_chunks: number;
+  tags: string[];
+  status: string;
+  uploaded_by: string;
+  created_at: string;
+}
+
+export interface DocumentPreview {
+  document_id: string;
+  mode: "pages" | "text";
+  pages_png_base64: string[];
+  text: string | null;
+  page_count: number;
+  truncated: boolean;
+}
+
 export interface AuditEventRow {
   id: number;
   eventType: string;
@@ -185,5 +210,75 @@ export interface AuditEventRow {
   caseId: string | null;
   ipAddress: string | null;
   metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+// ── Sharing ──────────────────────────────────────────────────────────────────
+
+export type ShareScope = "DOCUMENT" | "CASE_DOCUMENTS" | "CASE_FULL";
+
+export interface ShareLink {
+  id: string;
+  shareScope: ShareScope;
+  documentId: string | null;
+  caseId: string | null;
+  allowedEmail: string | null;
+  expiresAt: string;
+  maxUses: number;
+  useCount: number;
+  isRevoked: boolean;
+  isExpired: boolean;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface ShareCreateResult {
+  shareId: string;
+  shareUrl: string;
+  expiresAt: string;
+  maxUses: number;
+  shareScope?: ShareScope;
+}
+
+/** Response from GET /share/{token}/info */
+export interface ShareInfo {
+  scope: ShareScope;
+  filename: string | null;
+  caseTitle: string | null;
+  caseNumber: string | null;
+  docCount: number | null;
+  fileSizeBytes: number | null;
+  expiresAt: string;
+  requiresEmail: boolean;
+  isValid: boolean;
+  allowDownload: boolean;
+}
+
+/** Document metadata returned in share download responses. */
+export interface SharedDocMeta {
+  id: string;
+  filename: string;
+  docType: string;
+  fileSizeBytes: number;
+  mimeType: string;
+  tags: string[];
+  ocrStatus: string;
+  ocrConfidence: number | null;
+  ocrPageCount: number | null;
+  ocrFormattedText: string | null;
+  createdAt: string;
+}
+
+/** Case detail returned in CASE_FULL share download response. */
+export interface SharedCaseDetail {
+  id: string;
+  caseNumber: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  category: string | null;
+  memberCount: number;
+  members: Array<{ fullName: string; role: string; department: string | null }>;
   createdAt: string;
 }

@@ -1,20 +1,17 @@
 """
-documents.py — upload / list / download / delete + OCR. Prefix: /api/v1
+documents.py — upload / list / download / delete + OCR + preview. Prefix: /api/v1
 
 ROUTES:
     POST   /cases/{case_id}/documents        [SUPER_ADMIN, CASE_OFFICER]  multipart upload
     GET    /cases/{case_id}/documents        [members]  list metadata (no content)
     GET    /documents/{id}/download          [any auth]  pre-verify + stream plaintext
+    GET    /documents/{id}                   [members]  metadata fetch
+    GET    /documents/{id}/preview           [members]  server-side PNG/text preview
     DELETE /documents/{id}                   [SUPER_ADMIN, CASE_OFFICER]  soft delete
     POST   /documents/{id}/ocr              [any auth]  trigger OCR on demand
     POST   /documents/{id}/ocr/approve      [any auth]  approve or dismiss OCR text
     POST   /me/documents                     [any auth]  personal vault upload
     GET    /me/documents                     [any auth]  list own personal documents
-
-Case-scoped access (404 not 403 for non-members) is enforced in document_service/case_service.
-Personal docs are owner-only; the service checks uploaded_by == requesting_user_id.
-
-See feature_plans/specs/ocr_integration_spec.md + docs/EDGE_CASES.md §1 & §5.
 """
 
 from flask import Blueprint, Response, jsonify, request
@@ -22,10 +19,16 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.core.audit_events import AuditEventType
 from app.core.errors import APIError
-from app.core.rate_limit import UPLOAD_LIMITS
+from app.core.rate_limit import DEFAULT_LIMITS, UPLOAD_LIMITS
 from app.core.rbac import Role, require_roles
 from app.extensions import limiter
-from app.schemas.document_schemas import DocumentDeleteSchema, DocumentMetadataSchema, DocumentUploadSchema, OcrActionSchema
+from app.schemas.document_schemas import (
+    DocumentDeleteSchema,
+    DocumentMetadataSchema,
+    DocumentPreviewSchema,
+    DocumentUploadSchema,
+    OcrActionSchema,
+)
 from app.services import document_service, signature_service
 from app.services.audit_service import audit_service
 from app.services.document_service import IntegrityError
@@ -36,6 +39,14 @@ _upload_schema = DocumentUploadSchema()
 _ocr_action_schema = OcrActionSchema()
 _metadata_schema = DocumentMetadataSchema()
 _metadata_list_schema = DocumentMetadataSchema(many=True)
+_preview_schema = DocumentPreviewSchema()
+
+_VIEW_ROLES = (
+    Role.SUPER_ADMIN,
+    Role.CASE_OFFICER,
+    Role.INVESTIGATOR,
+    Role.PROSECUTOR,
+)
 
 
 def _parse_upload_payload():
@@ -121,6 +132,13 @@ def list_documents(case_id, current_user):
     return jsonify(_metadata_list_schema.dump(docs)), 200
 
 
+@documents_bp.route("/documents/<uuid:document_id>", methods=["GET"])
+@require_roles(*_VIEW_ROLES)
+def get_document(document_id, current_user):
+    document = document_service.get_document_for_user(str(document_id), current_user.id)
+    return jsonify(_metadata_schema.dump(document)), 200
+
+
 @documents_bp.route("/documents/<uuid:document_id>/download", methods=["GET"])
 @require_roles(
     Role.SUPER_ADMIN,
@@ -153,6 +171,36 @@ def download_document(document_id, current_user):
     )
 
 
+@documents_bp.route("/documents/<uuid:document_id>/preview", methods=["GET"])
+@require_roles(*_VIEW_ROLES)
+@limiter.limit(DEFAULT_LIMITS)
+def preview_document(document_id, current_user):
+    try:
+        payload = document_service.preview_document(str(document_id), current_user.id)
+    except APIError as exc:
+        if exc.code == "INTEGRITY_VIOLATION":
+            audit_service.record(
+                AuditEventType.INTEGRITY_VIOLATION.value,
+                actor_user_id=current_user.id,
+                target_type="document",
+                target_id=str(document_id),
+                metadata={"reason": "preview"},
+            )
+        raise
+    audit_service.record(
+        AuditEventType.DOCUMENT_PREVIEWED.value,
+        actor_user_id=current_user.id,
+        target_type="document",
+        target_id=payload["document_id"],
+        metadata={
+            "filename": payload.get("filename"),
+            "mime_type": payload.get("mime_type"),
+            "page_count": payload["page_count"],
+        },
+    )
+    return jsonify(_preview_schema.dump(payload)), 200
+
+
 @documents_bp.route("/documents/<uuid:document_id>/check-integrity", methods=["POST"])
 @require_roles(
     Role.SUPER_ADMIN,
@@ -167,9 +215,6 @@ def check_integrity(document_id, current_user):
     except IntegrityError:
         raise APIError(422, "INTEGRITY_VIOLATION", "Document failed integrity verification")
     return jsonify({"ok": True}), 200
-
-
-_delete_schema = DocumentDeleteSchema()
 
 
 @documents_bp.route("/documents/<uuid:document_id>", methods=["DELETE"])
@@ -210,7 +255,7 @@ def trigger_ocr(document_id):
     force = bool(body.get("force", False))
     doc = document_service.generate_ocr_for_document(str(document_id), user_id, force=force)
     audit_service.record(
-        AuditEventType.DOCUMENT_UPLOADED.value,  # closest available event; add OCR_GENERATED later
+        AuditEventType.DOCUMENT_UPLOADED.value,
         actor_user_id=user_id,
         target_type="document",
         target_id=doc.id,
