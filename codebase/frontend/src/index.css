@@ -68,6 +68,8 @@ button { -webkit-tap-highlight-color: transparent; }
 /* First child: remove top margin so text doesn't float away from the pane edge */
 .ocr-md > *:first-child { margin-top: 0; }
 
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* Tighten shell content padding on mobile */
 @media (max-width: 640px) {
   .shell-content { padding: 16px 12px 32px !important; }

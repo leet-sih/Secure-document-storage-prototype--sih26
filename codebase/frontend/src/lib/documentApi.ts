@@ -87,8 +87,11 @@ export async function approveOcr(docId: string, action: "approve" | "dismiss"): 
   return toDocumentMeta(dto);
 }
 
-export async function deleteDocument(docId: string): Promise<void> {
-  await apiFetch(`/documents/${docId}`, { method: "DELETE" });
+export async function deleteDocument(docId: string, totpCode: string): Promise<void> {
+  await apiFetch(`/documents/${docId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ totp_code: totpCode }),
+  });
 }
 
 /** Fetch a document's decrypted bytes with auth and trigger a browser save-as. */

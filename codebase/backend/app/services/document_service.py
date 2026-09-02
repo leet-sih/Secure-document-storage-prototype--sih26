@@ -566,12 +566,23 @@ def _decrypt_ocr_fields(doc: Document) -> None:
             doc.search_text = crypto.decrypt_field(search_enc, master_key, _INFO_OCR_SEARCH)
         except Exception:
             doc.search_text = None
-_OCR_CONFIDENCE_MIN = 0.60
+_OCR_AUTO_APPROVE_THRESHOLD = 0.65
+
+
+def _auto_approve_ocr(doc: Document, raw_text: str) -> None:
+    """Format raw OCR text and store it as DONE, skipping the review queue."""
+    from app.core.llm_formatter import format_ocr_text
+    master_key = kms.get_key(doc.id)
+    formatted = format_ocr_text(raw_text, doc.doc_type)
+    doc.search_text = crypto.encrypt_field(formatted, master_key, _INFO_OCR_SEARCH)
+    doc.ocr_raw_text = None
+    doc.ocr_status = "DONE"
 
 
 def _run_ocr_inline(doc: Document) -> None:
-    """Run Tesseract on `doc`. Any extracted text goes to AWAITING_APPROVAL so
-    the user can review and keep or discard it regardless of confidence.
+    """Run Tesseract on `doc`.
+    Confidence >= 65%: auto-approve — format and store as DONE.
+    Confidence < 65%: AWAITING_APPROVAL for manual review.
     FAILED is reserved for engine errors and truly empty results.
     Non-scannable types or born-digital PDFs: NOT_APPLICABLE.
     """
@@ -587,10 +598,9 @@ def _run_ocr_inline(doc: Document) -> None:
     if doc.mime_type == "application/pdf" and ocr_module.pdf_has_text_layer(data):
         text = ocr_module.extract_pdf_text_layer(data)
         if text.strip():
-            doc.ocr_raw_text = _encrypt_ocr_raw(text.strip(), doc.id)
-            doc.ocr_status = "AWAITING_APPROVAL"
             doc.ocr_confidence = 1.0
             doc.ocr_page_count = 1
+            _auto_approve_ocr(doc, text.strip())
         else:
             doc.ocr_status = "NOT_APPLICABLE"
         db.session.commit()
@@ -603,19 +613,20 @@ def _run_ocr_inline(doc: Document) -> None:
     doc.ocr_page_count = result.page_count or None
 
     if not result.text:
-        # Engine error or genuinely empty document — nothing to show the user.
         doc.ocr_status = "FAILED"
         doc.ocr_detail = result.detail or "OCR produced no readable text"
         db.session.commit()
         return
 
-    doc.ocr_raw_text = _encrypt_ocr_raw(result.text, doc.id)
-    if result.confidence < _OCR_CONFIDENCE_MIN:
+    if result.confidence >= _OCR_AUTO_APPROVE_THRESHOLD:
+        _auto_approve_ocr(doc, result.text)
+    else:
+        doc.ocr_raw_text = _encrypt_ocr_raw(result.text, doc.id)
         doc.ocr_detail = (
             f"Low confidence: {result.confidence:.0%} — "
             "review carefully before approving"
         )
-    doc.ocr_status = "AWAITING_APPROVAL"
+        doc.ocr_status = "AWAITING_APPROVAL"
     db.session.commit()
 
 

@@ -44,6 +44,10 @@ class OcrActionSchema(_Base):
     action = fields.Str(required=True, validate=validate.OneOf(["approve", "dismiss"]))
 
 
+class DocumentDeleteSchema(_Base):
+    totp_code = fields.Str(required=True, validate=validate.Length(equal=6))
+
+
 class DocumentMetadataSchema(Schema):
     id = fields.UUID(dump_only=True)
     case_id = fields.UUID(dump_only=True, allow_none=True)

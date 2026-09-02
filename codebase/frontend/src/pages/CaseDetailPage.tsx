@@ -10,6 +10,7 @@ import {
   Download,
   FileText,
   LayoutDashboard,
+  Loader2,
   MoreVertical,
   PenLine,
   Plus,
@@ -27,6 +28,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import DocumentDetailPanel from "../components/DocumentDetailPanel";
 import DocumentUploader from "../components/DocumentUploader";
 import OcrApprovalModal from "../components/OcrApprovalModal";
+import StepUpMfaModal from "../components/StepUpMfaModal";
 import TransferCaseModal from "../components/TransferCaseModal";
 import { getCase, getTimeline, patchCase, removeMember } from "../lib/caseApi";
 import { deleteDocument, downloadDocument, fetchCaseDocs, generateOcr } from "../lib/documentApi";
@@ -116,21 +118,25 @@ function fileIconColor(filename: string): string {
   return "#555869";
 }
 
-function OcrChip({ doc }: { doc: Pick<DocumentMeta, "ocrStatus" | "ocrConfidence"> }) {
+function OcrChip({ doc, isGenerating }: { doc: Pick<DocumentMeta, "ocrStatus" | "ocrConfidence">; isGenerating?: boolean }) {
   const { ocrStatus, ocrConfidence } = doc;
   const pct = ocrConfidence != null ? Math.round(ocrConfidence * 100) : null;
+  if (isGenerating || ocrStatus === "PENDING") return (
+    <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#555869" }}>
+      <Loader2 size={12} style={{ animation: "spin 0.9s linear infinite" }} /> Processing…
+    </span>
+  );
   if (!ocrStatus || ocrStatus === "NOT_APPLICABLE") return <span style={{ color: "#555869" }}>—</span>;
-  if (ocrStatus === "PENDING") return <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#555869" }}>Processing…</span>;
   if (ocrStatus === "DONE") return (
     <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#22c55e" }}>
       <CheckCircle2 size={12} /> Verified{pct != null ? ` (${pct}%)` : ""}
     </span>
   );
   if (ocrStatus === "AWAITING_APPROVAL") {
-    const isLow = ocrConfidence != null && ocrConfidence < 0.6;
+    const isLow = ocrConfidence != null && ocrConfidence < 0.65;
     return (
       <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: isLow ? "#fb923c" : "#f59e0b" }}>
-        <AlertCircle size={12} /> {pct != null ? `Low confidence (${pct}%)` : "Pending review"}
+        <AlertCircle size={12} /> {isLow && pct != null ? `Low confidence (${pct}%)` : "Pending review"}
       </span>
     );
   }
@@ -801,7 +807,9 @@ export default function CaseDetailPage() {
   const [selectedDoc, setSelectedDoc] = useState<DocumentMeta | null>(null);
   const [openSignForm, setOpenSignForm] = useState(false);
   const [menuDocId, setMenuDocId] = useState<string | null>(null);
-  const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<DocumentMeta | null>(null);
+  const [pendingDeleteDoc, setPendingDeleteDoc] = useState<DocumentMeta | null>(null);
+  const [deleteOtp, setDeleteOtp] = useState("");
+  const [deleteOtpError, setDeleteOtpError] = useState("");
   const [docSearch, setDocSearch] = useState("");
   const [docTypeFilter, setDocTypeFilter] = useState("All");
   const [sortField, setSortField] = useState<"name" | "size" | "date">("date");
@@ -845,13 +853,21 @@ export default function CaseDetailPage() {
     }
   }
 
-  async function handleDeleteDoc(doc: DocumentMeta) {
+  async function handleDeleteDoc(doc: DocumentMeta, totpCode: string) {
+    setDeleteOtpError("");
     try {
-      await deleteDocument(doc.id);
+      await deleteDocument(doc.id, totpCode);
       setDocs((prev) => prev.filter((d) => d.id !== doc.id));
       if (selectedDoc?.id === doc.id) setSelectedDoc(null);
-    } catch {
-      /* non-fatal — show no toast in prototype */
+      setPendingDeleteDoc(null);
+      setDeleteOtp("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      if (msg.toLowerCase().includes("invalid") || msg.toLowerCase().includes("unauthorized")) {
+        setDeleteOtpError("Invalid TOTP code — try again.");
+      } else {
+        setDeleteOtpError(msg);
+      }
     }
   }
 
@@ -1204,7 +1220,7 @@ export default function CaseDetailPage() {
                               {fmtSize(d.fileSizeBytes)}
                             </td>
                             <td style={{ padding: "12px", borderBottom: "1px solid #1e2028" }}>
-                              <OcrChip doc={d} />
+                              <OcrChip doc={d} isGenerating={ocrGenerating === d.id} />
                             </td>
                             <td style={{ padding: "12px", borderBottom: "1px solid #1e2028", fontSize: "13px", color: "#8b8fa8", whiteSpace: "nowrap" }}>
                               {formatDate(d.createdAt)}
@@ -1254,7 +1270,7 @@ export default function CaseDetailPage() {
                                         {(user?.role === "SUPER_ADMIN" || user?.role === "CASE_OFFICER") && (
                                           <>
                                             <div style={{ height: "1px", background: "#2a2d35", margin: "4px 0" }} />
-                                            <button type="button" onClick={() => { setMenuDocId(null); setConfirmDeleteDoc(d); }} style={{ width: "100%", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: "none", color: "#ef4444", fontSize: "13px", cursor: "pointer", textAlign: "left" }}>
+                                            <button type="button" onClick={() => { setMenuDocId(null); setPendingDeleteDoc(d); setDeleteOtp(""); setDeleteOtpError(""); }} style={{ width: "100%", padding: "8px 14px", display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: "none", color: "#ef4444", fontSize: "13px", cursor: "pointer", textAlign: "left" }}>
                                               <Trash2 size={14} /> Delete document
                                             </button>
                                           </>
@@ -1324,13 +1340,14 @@ export default function CaseDetailPage() {
         />
       )}
 
-      {confirmDeleteDoc && (
-        <ConfirmModal
-          title="Delete document"
-          body={`Permanently delete "${confirmDeleteDoc.filename}"? The action is logged to the audit trail.`}
-          confirmLabel="Delete"
-          onConfirm={() => { void handleDeleteDoc(confirmDeleteDoc); setConfirmDeleteDoc(null); }}
-          onClose={() => setConfirmDeleteDoc(null)}
+      {pendingDeleteDoc && (
+        <StepUpMfaModal
+          label={`Delete "${pendingDeleteDoc.filename}" — this is permanent and logged to the audit trail.`}
+          otp={deleteOtp}
+          error={deleteOtpError}
+          onOtpChange={setDeleteOtp}
+          onVerify={() => void handleDeleteDoc(pendingDeleteDoc, deleteOtp)}
+          onClose={() => { setPendingDeleteDoc(null); setDeleteOtp(""); setDeleteOtpError(""); }}
         />
       )}
     </>
