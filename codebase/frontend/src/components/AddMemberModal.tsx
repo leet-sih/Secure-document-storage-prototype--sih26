@@ -8,6 +8,7 @@ interface UserOption {
   id: string;
   fullName: string;
   email: string;
+  role: string;
 }
 
 interface Props {
@@ -41,7 +42,7 @@ export default function AddMemberModal({
     apiFetch("/users?limit=200")
       .then((res) => {
         const dto = res as {
-          users: Array<{ id: string; full_name: string; email: string; is_active: boolean }>;
+          users: Array<{ id: string; full_name: string; email: string; is_active: boolean; role: string }>;
         };
         const available = dto.users.filter(
           (u) => u.is_active && !existingMemberIds.has(u.id)
@@ -50,6 +51,7 @@ export default function AddMemberModal({
           id: u.id,
           fullName: u.full_name,
           email: u.email,
+          role: u.role,
         }));
         setUsers(opts);
         if (opts.length > 0) setUserId(opts[0].id);
@@ -160,7 +162,7 @@ export default function AddMemberModal({
             >
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.fullName} — {u.email}
+                  {u.fullName} ({u.role.replace(/_/g, " ")})
                 </option>
               ))}
             </select>
