@@ -79,6 +79,7 @@ class UserSlimSchema(Schema):
     full_name = fields.Str(dump_only=True)
     role = fields.Str(dump_only=True)
     department_id = fields.UUID(dump_only=True)
+    is_active = fields.Bool(dump_only=True)
 
 
 class DepartmentSchema(Schema):

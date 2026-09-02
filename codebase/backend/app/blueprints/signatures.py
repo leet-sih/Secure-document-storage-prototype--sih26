@@ -18,6 +18,8 @@ from flask import Blueprint, jsonify, request
 from app.core.audit_events import AuditEventType
 from app.core.rbac import Role, require_roles
 from app.core.security import current_user_required, require_access_jwt
+from app.extensions import db
+from app.models.document import Document
 from app.schemas.signature_schemas import SignRequestSchema, SignatureResponseSchema, VerifyResponseSchema
 from app.services import signature_service
 from app.services.audit_service import audit_service
@@ -34,12 +36,13 @@ _sig_list_schema = SignatureResponseSchema(many=True)
 def sign_document(doc_id, current_user):
     body = _sign_req_schema.load(request.get_json(silent=True) or {})
     sig = signature_service.sign_document(str(doc_id), current_user, comment=body.get("comment"))
+    doc = db.session.get(Document, str(doc_id))
     audit_service.record(
         AuditEventType.DOCUMENT_SIGNED.value,
         actor_user_id=current_user.id,
         target_type="document",
         target_id=doc_id,
-        case_id=None,
+        case_id=doc.case_id if doc else None,
         ip_address=request.remote_addr,
         metadata={"auto": False},
     )
@@ -59,11 +62,13 @@ def list_signatures(doc_id):
 def verify_signatures(doc_id):
     current_user = current_user_required()
     results = signature_service.verify_signatures(str(doc_id), str(current_user.id))
+    doc = db.session.get(Document, str(doc_id))
     audit_service.record(
         AuditEventType.SIGNATURE_VERIFIED.value,
         actor_user_id=current_user.id,
         target_type="document",
         target_id=doc_id,
+        case_id=doc.case_id if doc else None,
         ip_address=request.remote_addr,
     )
     now = datetime.now(timezone.utc)
@@ -80,11 +85,13 @@ def verify_signatures(doc_id):
 def revoke_signature(doc_id, sig_id):
     current_user = current_user_required()
     signature_service.revoke_signature(str(doc_id), str(sig_id), current_user)
+    doc = db.session.get(Document, str(doc_id))
     audit_service.record(
         AuditEventType.SIGNATURE_REVOKED.value,
         actor_user_id=current_user.id,
         target_type="document",
         target_id=doc_id,
+        case_id=doc.case_id if doc else None,
         ip_address=request.remote_addr,
         metadata={"signature_id": str(sig_id)},
     )
