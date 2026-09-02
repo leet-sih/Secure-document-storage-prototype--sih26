@@ -707,7 +707,7 @@ function ActivityTab({ caseId }: ActivityTabProps) {
   }, [events]);
 
   const filtered = useMemo(() => {
-    let list = [...events].reverse();
+    let list = [...events];
     if (category !== "All") {
       const allowed = CATEGORY_EVENTS[category] ?? [];
       list = list.filter((e) => allowed.includes(e.eventType));

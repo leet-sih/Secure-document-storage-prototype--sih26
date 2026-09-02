@@ -462,14 +462,14 @@ def transfer_case(case_id, data: dict, actor: User) -> dict:
 
 
 def get_case_timeline(case_id, user: User) -> list[dict]:
-    """Return audit events for this case, oldest first."""
+    """Return the 200 most recent audit events for this case, newest first."""
     get_case_for_user(case_id, str(user.id))  # access check
 
     from app.models.audit_event import AuditEvent
     events = (
         AuditEvent.query
         .filter_by(case_id=str(case_id))
-        .order_by(AuditEvent.id.asc())
+        .order_by(AuditEvent.id.desc())
         .limit(200)
         .all()
     )
