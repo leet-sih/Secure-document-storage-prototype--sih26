@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AlertCircle,
   ArrowLeftRight,
   ArrowUpDown,
   BadgeCheck,
+  Briefcase,
   CheckCircle2,
   Clock,
   Download,
+  Eye,
   FileText,
   LayoutDashboard,
   Loader2,
@@ -18,6 +20,9 @@ import {
   Share2,
   ShieldCheck,
   Trash2,
+  Upload,
+  UserMinus,
+  UserPlus,
   Users,
   XCircle,
 } from "lucide-react";
@@ -620,6 +625,55 @@ function MembersTab({ detail, onMemberAdded, onMemberRemoved }: MembersTabProps)
   );
 }
 
+// ── Activity helpers ───────────────────────────────────────────────────────────
+
+const CATEGORY_EVENTS: Record<string, string[]> = {
+  Documents:  ["DOCUMENT_UPLOADED", "DOCUMENT_DOWNLOADED", "DOCUMENT_DELETED", "DOCUMENT_PREVIEWED"],
+  Signatures: ["DOCUMENT_SIGNED", "SIGNATURE_VERIFIED", "SIGNATURE_REVOKED"],
+  Members:    ["CASE_MEMBER_ADDED", "CASE_MEMBER_REMOVED"],
+  Case:       ["CASE_CREATED", "CASE_UPDATED", "CASE_CLOSED", "CASE_ACCESSED"],
+};
+
+function eventLabel(e: TimelineEvent): string {
+  const m = e.metadata as Record<string, unknown>;
+  const fn = m.filename ? `"${String(m.filename)}"` : null;
+  switch (e.eventType) {
+    case "DOCUMENT_UPLOADED":   return fn ? `Uploaded ${fn}` : "Uploaded document";
+    case "DOCUMENT_DOWNLOADED": return fn ? `Downloaded ${fn}` : "Downloaded document";
+    case "DOCUMENT_DELETED":    return fn ? `Deleted ${fn}` : "Deleted document";
+    case "DOCUMENT_SIGNED":     return m.auto ? "Auto-signed on upload" : "Signed document";
+    case "SIGNATURE_VERIFIED":  return "Verified signatures";
+    case "SIGNATURE_REVOKED":   return "Revoked a signature";
+    case "CASE_MEMBER_ADDED":
+      return `Added as ${m.role ? String(m.role).replace(/_/g, " ") : "member"}`;
+    case "CASE_MEMBER_REMOVED": return "Removed from case";
+    case "CASE_CREATED":        return "Created this case";
+    case "CASE_UPDATED":        return "Updated case details";
+    case "CASE_CLOSED":         return "Closed this case";
+    case "CASE_ACCESSED":       return "Accessed case";
+    default: return e.eventType.replace(/_/g, " ").toLowerCase();
+  }
+}
+
+function eventIcon(eventType: string): ReactNode {
+  if (eventType === "DOCUMENT_UPLOADED")   return <Upload size={13} />;
+  if (eventType === "DOCUMENT_DOWNLOADED") return <Download size={13} />;
+  if (eventType === "DOCUMENT_DELETED")    return <Trash2 size={13} />;
+  if (eventType === "DOCUMENT_SIGNED")     return <PenLine size={13} />;
+  if (eventType === "SIGNATURE_VERIFIED")  return <ShieldCheck size={13} />;
+  if (eventType === "SIGNATURE_REVOKED")   return <XCircle size={13} />;
+  if (eventType === "CASE_MEMBER_ADDED")   return <UserPlus size={13} />;
+  if (eventType === "CASE_MEMBER_REMOVED") return <UserMinus size={13} />;
+  if (eventType === "CASE_ACCESSED")       return <Eye size={13} />;
+  return <Briefcase size={13} />;
+}
+
+const _filterSelect: React.CSSProperties = {
+  height: "32px", padding: "0 10px",
+  background: "#1e2028", border: "1px solid #2a2d35", borderRadius: "6px",
+  color: "#e8eaf0", fontSize: "13px", cursor: "pointer",
+};
+
 // ── Subcomponent: ActivityTab ──────────────────────────────────────────────────
 
 interface ActivityTabProps {
@@ -628,108 +682,99 @@ interface ActivityTabProps {
 
 function ActivityTab({ caseId }: ActivityTabProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
-  const [nextBeforeId, setNextBeforeId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [category, setCategory] = useState("All");
+  const [actorId, setActorId] = useState("All");
 
   useEffect(() => {
-    getTimeline(caseId)
-      .then((res) => {
-        setEvents(res.events);
-        setNextBeforeId(res.nextBeforeId);
-      })
+    getTimeline(caseId, 200)
+      .then((res) => setEvents(res.events))
       .catch(() => setEvents([]))
       .finally(() => setLoading(false));
-  // Run once on mount.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function loadMore() {
-    if (!nextBeforeId) return;
-    getTimeline(caseId, 50, nextBeforeId).then((res) => {
-      setEvents((prev) => [...prev, ...res.events]);
-      setNextBeforeId(res.nextBeforeId);
-    });
-  }
+  const actors = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const e of events) {
+      if (e.actor) seen.set(String(e.actor.id), e.actor.fullName);
+    }
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [events]);
+
+  const filtered = useMemo(() => {
+    let list = [...events].reverse();
+    if (category !== "All") {
+      const allowed = CATEGORY_EVENTS[category] ?? [];
+      list = list.filter((e) => allowed.includes(e.eventType));
+    }
+    if (actorId !== "All") {
+      list = list.filter((e) => String(e.actor?.id) === actorId);
+    }
+    return list;
+  }, [events, category, actorId]);
 
   return (
-    <div
-      style={{
-        background: "#111318",
-        border: "1px solid #2a2d35",
-        borderRadius: "8px",
-        padding: "8px 4px",
-      }}
-    >
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+
+      {/* Filter bar */}
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <select value={category} onChange={(e) => setCategory(e.target.value)} style={_filterSelect}>
+          <option value="All">All events</option>
+          {Object.keys(CATEGORY_EVENTS).map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={actorId} onChange={(e) => setActorId(e.target.value)} style={_filterSelect}>
+          <option value="All">All members</option>
+          {actors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+        {(category !== "All" || actorId !== "All") && (
+          <button
+            type="button"
+            onClick={() => { setCategory("All"); setActorId("All"); }}
+            style={{ height: "32px", padding: "0 10px", background: "transparent", border: "1px solid #2a2d35", borderRadius: "6px", color: "#8b8fa8", fontSize: "13px", cursor: "pointer" }}
+          >
+            Clear
+          </button>
+        )}
+        {!loading && (
+          <span style={{ marginLeft: "auto", fontSize: "12px", color: "#555869", alignSelf: "center" }}>
+            {filtered.length} event{filtered.length !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      {/* Event feed */}
+      <div style={{ background: "#111318", border: "1px solid #2a2d35", borderRadius: "8px" }}>
       {loading && (
-        <div
-          style={{
-            padding: "24px",
-            fontSize: "13px",
-            color: "#555869",
-            textAlign: "center",
-          }}
-        >
+        <div style={{ padding: "24px", fontSize: "13px", color: "#555869", textAlign: "center" }}>
           Loading activity…
         </div>
       )}
 
-      {!loading && events.length === 0 && (
-        <div
-          style={{
-            padding: "24px",
-            fontSize: "13px",
-            color: "#555869",
-            textAlign: "center",
-          }}
-        >
-          No activity yet.
+      {!loading && filtered.length === 0 && (
+        <div style={{ padding: "24px", fontSize: "13px", color: "#555869", textAlign: "center" }}>
+          {events.length === 0 ? "No activity yet." : "No events match these filters."}
         </div>
       )}
 
-      {[...events].reverse().map((e) => {
+      {filtered.map((e) => {
         const color = eventColor(e.eventType);
         const actor = e.actor;
         return (
           <div
             key={e.id}
-            style={{
-              display: "flex",
-              gap: "12px",
-              padding: "14px 16px",
-              borderBottom: "1px solid #1e2028",
-            }}
+            style={{ display: "flex", gap: "12px", padding: "14px 16px", borderBottom: "1px solid #1e2028" }}
           >
-            {/* Event icon chip */}
-            <div
-              style={{
-                width: "26px",
-                height: "26px",
-                flex: "none",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: "6px",
-                background: "rgba(255,255,255,0.04)",
-                color,
-              }}
-            >
-              <Clock size={14} />
+            <div style={{ width: "28px", height: "28px", flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "6px", background: "rgba(255,255,255,0.04)", color }}>
+              {eventIcon(e.eventType)}
             </div>
 
-            {/* Text block */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "3px",
-                minWidth: 0,
-              }}
-            >
-              <div style={{ fontSize: "13px", color: "#e8eaf0" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "3px", minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: "13px", color: "#e8eaf0", display: "flex", alignItems: "baseline", gap: "6px", flexWrap: "wrap" }}>
                 {actor ? (
                   <>
-                    {actor.fullName}{" "}
-                    <span style={{ color: "#8b8fa8" }}>
+                    <span style={{ fontWeight: 500 }}>{actor.fullName}</span>
+                    <span style={{ color: "#8b8fa8", fontSize: "12px" }}>
                       ({ROLE_LABEL[actor.role] ?? actor.role})
                     </span>
                   </>
@@ -737,24 +782,8 @@ function ActivityTab({ caseId }: ActivityTabProps) {
                   <span style={{ color: "#8b8fa8" }}>System</span>
                 )}
               </div>
-              <div style={{ fontSize: "12px", color: "#8b8fa8" }}>
-                <span
-                  style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    color,
-                  }}
-                >
-                  {e.eventType}
-                </span>
-                {e.targetType && ` · ${e.targetType}`}
-              </div>
-              <div
-                style={{
-                  fontSize: "11px",
-                  fontFamily: "'JetBrains Mono', monospace",
-                  color: "#555869",
-                }}
-              >
+              <div style={{ fontSize: "12px", color: "#8b8fa8" }}>{eventLabel(e)}</div>
+              <div style={{ fontSize: "11px", fontFamily: "'JetBrains Mono', monospace", color: "#555869" }}>
                 {formatTs(e.createdAt)}
               </div>
             </div>
@@ -762,28 +791,10 @@ function ActivityTab({ caseId }: ActivityTabProps) {
         );
       })}
 
-      {nextBeforeId && (
-        <div style={{ display: "flex", justifyContent: "center", padding: "14px" }}>
-          <button
-            type="button"
-            onClick={loadMore}
-            style={{
-              height: "30px",
-              padding: "0 14px",
-              background: "#1a1d24",
-              border: "1px solid #2a2d35",
-              borderRadius: "4px",
-              color: "#8b8fa8",
-              fontSize: "13px",
-              cursor: "pointer",
-            }}
-          >
-            Load more
-          </button>
-        </div>
-      )}
+      </div>
     </div>
   );
+
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────────
@@ -898,11 +909,7 @@ export default function CaseDetailPage() {
   const canTransfer =
     user?.role === "SUPER_ADMIN" || detail.leadOfficer?.id === user?.id;
 
-  const canDownload =
-    user?.role === "SUPER_ADMIN" ||
-    user?.role === "CASE_OFFICER" ||
-    user?.role === "INVESTIGATOR" ||
-    user?.role === "PROSECUTOR";
+
 
   type TabSpec = { id: Tab; label: string; icon: ReactNode };
 
@@ -1172,7 +1179,7 @@ export default function CaseDetailPage() {
             )}
 
             {/* Documents table */}
-            <div style={{ background: "#111318", border: "1px solid #2a2d35", borderRadius: "8px", overflow: "hidden" }}>
+            <div style={{ background: "#111318", border: "1px solid #2a2d35", borderRadius: "8px" }}>
               {docsLoading ? (
                 <div style={{ padding: "24px", fontSize: "13px", color: "#555869" }}>Loading…</div>
               ) : (
