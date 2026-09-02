@@ -764,6 +764,12 @@ export default function CaseDetailPage() {
   const canTransfer =
     user?.role === "SUPER_ADMIN" || detail.leadOfficer?.id === user?.id;
 
+  const canDownload =
+    user?.role === "SUPER_ADMIN" ||
+    user?.role === "CASE_OFFICER" ||
+    user?.role === "INVESTIGATOR" ||
+    user?.role === "PROSECUTOR";
+
   type TabSpec = { id: Tab; label: string; icon: ReactNode };
 
   const tabs: TabSpec[] = [
@@ -1029,26 +1035,28 @@ export default function CaseDetailPage() {
                           {new Date(d.createdAt).toLocaleDateString()}
                         </td>
                         <td style={{ padding: "6px 16px", textAlign: "right" }}>
-                          <button
-                            type="button"
-                            onClick={() => downloadDocument(d.id, d.filename)}
-                            style={{
-                              height: "28px",
-                              padding: "0 10px",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "5px",
-                              background: "#3b82f6",
-                              border: "none",
-                              borderRadius: "4px",
-                              color: "#ffffff",
-                              fontSize: "12px",
-                              fontWeight: 500,
-                              cursor: "pointer",
-                            }}
-                          >
-                            <Download size={12} /> Download
-                          </button>
+                          {canDownload && (
+                            <button
+                              type="button"
+                              onClick={() => downloadDocument(d.id, d.filename)}
+                              style={{
+                                height: "28px",
+                                padding: "0 10px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                background: "#3b82f6",
+                                border: "none",
+                                borderRadius: "4px",
+                                color: "#ffffff",
+                                fontSize: "12px",
+                                fontWeight: 500,
+                                cursor: "pointer",
+                              }}
+                            >
+                              <Download size={12} /> Download
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

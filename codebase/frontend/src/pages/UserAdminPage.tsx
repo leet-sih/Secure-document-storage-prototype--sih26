@@ -90,6 +90,20 @@ export default function UserAdminPage() {
     setUsers(res.users.map(toAdminUser));
   }
 
+  async function toggleUserActive(user: AdminUser) {
+    if (user.isActive) {
+      await apiFetch(`/users/${user.id}`, {
+        method: "DELETE",
+      });
+    } else {
+      await apiFetch(`/users/${user.id}/activate`, {
+        method: "POST",
+      });
+    }
+
+    await loadUsers();
+  }
+  
   useEffect(() => {
     Promise.all([
       loadUsers(),
@@ -160,6 +174,7 @@ export default function UserAdminPage() {
                   <th style={th}>DEPARTMENT</th>
                   <th style={th}>STATUS</th>
                   <th style={th}>MFA</th>
+                  <th style={{ ...th, textAlign: "right" }}>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
@@ -201,11 +216,29 @@ export default function UserAdminPage() {
                     <td style={{ ...td, color: u.mfaEnabled ? "#22c55e" : "#8b8fa8" }}>
                       {u.mfaEnabled ? "Enabled" : "—"}
                     </td>
+                    <td style={{ ...td, textAlign: "right" }}>
+                      <button
+                        type="button"
+                        onClick={() => void toggleUserActive(u)}
+                        style={{
+                          height: 28,
+                          padding: "0 10px",
+                          background: "transparent",
+                          border: "1px solid #2a2d35",
+                          borderRadius: 4,
+                          color: u.isActive ? "#ef4444" : "#22c55e",
+                          fontSize: 12,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {u.isActive ? "Deactivate" : "Activate"}
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {users.length === 0 && !loadError && (
                   <tr>
-                    <td style={{ ...td, color: "#8b8fa8" }} colSpan={6}>
+                    <td style={{ ...td, color: "#8b8fa8" }} colSpan={7}>
                       No users yet.
                     </td>
                   </tr>
