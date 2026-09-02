@@ -23,7 +23,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from app.core.audit_events import AuditEventType
 from app.core.errors import APIError
 from app.core.rate_limit import UPLOAD_LIMITS
-from app.core.rbac import Role, require_recent_mfa, require_roles
+from app.core.rbac import Role, require_roles
 from app.extensions import limiter
 from app.schemas.document_schemas import DocumentDeleteSchema, DocumentMetadataSchema, DocumentUploadSchema, OcrActionSchema
 from app.services import document_service, signature_service
@@ -173,9 +173,7 @@ _delete_schema = DocumentDeleteSchema()
 
 
 @documents_bp.route("/documents/<uuid:document_id>", methods=["DELETE"])
-@jwt_required()
 @require_roles(Role.SUPER_ADMIN, Role.CASE_OFFICER)
-@require_recent_mfa()
 def delete_document(document_id, current_user):
     from app.core import totp as _totp
 
