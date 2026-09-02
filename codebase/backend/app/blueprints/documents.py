@@ -23,7 +23,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from app.core.audit_events import AuditEventType
 from app.core.errors import APIError
 from app.core.rate_limit import UPLOAD_LIMITS
-from app.core.rbac import Role, require_roles
+from app.core.rbac import Role, require_recent_mfa, require_roles
 from app.extensions import limiter
 from app.schemas.document_schemas import DocumentDeleteSchema, DocumentMetadataSchema, DocumentUploadSchema, OcrActionSchema
 from app.services import document_service, signature_service
@@ -110,16 +110,26 @@ def upload_document(case_id, current_user):
 
 
 @documents_bp.route("/cases/<uuid:case_id>/documents", methods=["GET"])
-@jwt_required()
-def list_documents(case_id):
-    docs = document_service.list_documents(str(case_id), get_jwt_identity())
+@require_roles(
+    Role.SUPER_ADMIN,
+    Role.CASE_OFFICER,
+    Role.INVESTIGATOR,
+    Role.PROSECUTOR,
+)
+def list_documents(case_id, current_user):
+    docs = document_service.list_documents(str(case_id), str(current_user.id))
     return jsonify(_metadata_list_schema.dump(docs)), 200
 
 
 @documents_bp.route("/documents/<uuid:document_id>/download", methods=["GET"])
-@jwt_required()
-def download_document(document_id):
-    user_id = get_jwt_identity()
+@require_roles(
+    Role.SUPER_ADMIN,
+    Role.CASE_OFFICER,
+    Role.INVESTIGATOR,
+    Role.PROSECUTOR,
+)
+def download_document(document_id, current_user):
+    user_id = str(current_user.id)
     try:
         doc, stream = document_service.download_document(str(document_id), user_id)
     except IntegrityError:
@@ -149,6 +159,7 @@ _delete_schema = DocumentDeleteSchema()
 @documents_bp.route("/documents/<uuid:document_id>", methods=["DELETE"])
 @jwt_required()
 @require_roles(Role.SUPER_ADMIN, Role.CASE_OFFICER)
+@require_recent_mfa()
 def delete_document(document_id, current_user):
     from app.core import totp as _totp
 

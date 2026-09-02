@@ -57,9 +57,28 @@ class AuditService:
         return hashlib.sha256(payload.encode()).hexdigest()
 
     def verify_chain(self) -> dict:
-        """Recompute the whole chain in order.
-        RETURNS: {total_events, chain_valid, first_break_at}. TODO."""
-        raise NotImplementedError
+        """Recompute the audit chain and report the first broken event, if any."""
+        events = AuditEvent.query.order_by(AuditEvent.id.asc()).all()
+
+        expected_prev = "0" * 64
+        first_break = None
+
+        for event in events:
+            if event.prev_hash != expected_prev:
+               first_break = event.id
+               break
+
+            if self._compute_hash(event.prev_hash, event) != event.this_hash:
+               first_break = event.id
+               break
+
+            expected_prev = event.this_hash
+
+        return {
+            "total_events": len(events),
+            "chain_valid": first_break is None,
+            "first_break_at": first_break,
+    }
 
 
 audit_service = AuditService()   # import this singleton everywhere

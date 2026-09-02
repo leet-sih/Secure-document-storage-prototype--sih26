@@ -898,6 +898,12 @@ export default function CaseDetailPage() {
   const canTransfer =
     user?.role === "SUPER_ADMIN" || detail.leadOfficer?.id === user?.id;
 
+  const canDownload =
+    user?.role === "SUPER_ADMIN" ||
+    user?.role === "CASE_OFFICER" ||
+    user?.role === "INVESTIGATOR" ||
+    user?.role === "PROSECUTOR";
+
   type TabSpec = { id: Tab; label: string; icon: ReactNode };
 
   const tabs: TabSpec[] = [
@@ -1295,6 +1301,7 @@ export default function CaseDetailPage() {
                     </div>
                   )}
                 </>
+
               )}
             </div>
           </div>
