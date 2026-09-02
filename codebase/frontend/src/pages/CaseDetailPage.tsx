@@ -6,6 +6,7 @@ import {
   ArrowUpDown,
   BadgeCheck,
   Briefcase,
+  RotateCcw,
   CheckCircle2,
   Clock,
   Download,
@@ -685,14 +686,17 @@ function ActivityTab({ caseId }: ActivityTabProps) {
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState("All");
   const [actorId, setActorId] = useState("All");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
+    setLoading(true);
     getTimeline(caseId, 200)
       .then((res) => setEvents(res.events))
       .catch(() => setEvents([]))
       .finally(() => setLoading(false));
+  // refreshKey is the intentional trigger here
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refreshKey]);
 
   const actors = useMemo(() => {
     const seen = new Map<string, string>();
@@ -736,8 +740,17 @@ function ActivityTab({ caseId }: ActivityTabProps) {
             Clear
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => setRefreshKey((k) => k + 1)}
+          disabled={loading}
+          title="Refresh activity"
+          style={{ marginLeft: "auto", height: "32px", width: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid #2a2d35", borderRadius: "6px", color: loading ? "#555869" : "#8b8fa8", cursor: loading ? "not-allowed" : "pointer" }}
+        >
+          <RotateCcw size={14} style={{ animation: loading ? "spin 1s linear infinite" : undefined }} />
+        </button>
         {!loading && (
-          <span style={{ marginLeft: "auto", fontSize: "12px", color: "#555869", alignSelf: "center" }}>
+          <span style={{ fontSize: "12px", color: "#555869", alignSelf: "center" }}>
             {filtered.length} event{filtered.length !== 1 ? "s" : ""}
           </span>
         )}
