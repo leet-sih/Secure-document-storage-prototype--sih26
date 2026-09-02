@@ -683,20 +683,34 @@ interface ActivityTabProps {
 
 function ActivityTab({ caseId }: ActivityTabProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [nextBeforeId, setNextBeforeId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [category, setCategory] = useState("All");
   const [actorId, setActorId] = useState("All");
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     setLoading(true);
-    getTimeline(caseId, 200)
-      .then((res) => setEvents(res.events))
+    setEvents([]);
+    setNextBeforeId(null);
+    getTimeline(caseId, 50)
+      .then((res) => { setEvents(res.events); setNextBeforeId(res.nextBeforeId); })
       .catch(() => setEvents([]))
       .finally(() => setLoading(false));
-  // refreshKey is the intentional trigger here
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
+
+  function loadMore() {
+    if (!nextBeforeId || loadingMore) return;
+    setLoadingMore(true);
+    getTimeline(caseId, 50, nextBeforeId)
+      .then((res) => {
+        setEvents((prev) => [...prev, ...res.events]);
+        setNextBeforeId(res.nextBeforeId);
+      })
+      .finally(() => setLoadingMore(false));
+  }
 
   const actors = useMemo(() => {
     const seen = new Map<string, string>();
@@ -751,7 +765,7 @@ function ActivityTab({ caseId }: ActivityTabProps) {
         </button>
         {!loading && (
           <span style={{ fontSize: "12px", color: "#555869", alignSelf: "center" }}>
-            {filtered.length} event{filtered.length !== 1 ? "s" : ""}
+            {filtered.length} of {events.length} loaded{nextBeforeId ? "+" : ""}
           </span>
         )}
       </div>
@@ -803,6 +817,19 @@ function ActivityTab({ caseId }: ActivityTabProps) {
           </div>
         );
       })}
+
+      {nextBeforeId && !loading && (
+        <div style={{ display: "flex", justifyContent: "center", padding: "14px 16px", borderTop: "1px solid #1e2028" }}>
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loadingMore}
+            style={{ height: "32px", padding: "0 18px", background: "#1a1d24", border: "1px solid #2a2d35", borderRadius: "6px", color: loadingMore ? "#555869" : "#8b8fa8", fontSize: "13px", cursor: loadingMore ? "not-allowed" : "pointer" }}
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
+        </div>
+      )}
 
       </div>
     </div>

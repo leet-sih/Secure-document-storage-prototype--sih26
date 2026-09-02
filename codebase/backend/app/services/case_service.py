@@ -461,21 +461,29 @@ def transfer_case(case_id, data: dict, actor: User) -> dict:
     return _build_detail(case)
 
 
-def get_case_timeline(case_id, user: User) -> list[dict]:
-    """Return the 200 most recent audit events for this case, newest first."""
+def get_case_timeline(
+    case_id, user: User, limit: int = 50, before_id: int | None = None
+) -> dict:
+    """Return up to `limit` most recent audit events for this case, newest first.
+
+    Cursor-based pagination: pass `before_id` (the smallest id from the previous
+    page) to get the next older batch. Returns `next_before_id` = the id to use
+    for the following page, or None when the end has been reached.
+    """
     get_case_for_user(case_id, str(user.id))  # access check
 
     from app.models.audit_event import AuditEvent
-    events = (
-        AuditEvent.query
-        .filter_by(case_id=str(case_id))
-        .order_by(AuditEvent.id.desc())
-        .limit(200)
-        .all()
-    )
+    query = AuditEvent.query.filter_by(case_id=str(case_id))
+    if before_id is not None:
+        query = query.filter(AuditEvent.id < before_id)
+
+    # Fetch one extra to detect whether another page exists.
+    rows = query.order_by(AuditEvent.id.desc()).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
 
     result = []
-    for ev in events:
+    for ev in rows:
         actor = db.session.get(User, ev.actor_user_id) if ev.actor_user_id else None
         result.append({
             "id": ev.id,
@@ -490,7 +498,11 @@ def get_case_timeline(case_id, user: User) -> list[dict]:
             "metadata": ev.event_metadata or {},
             "created_at": ev.created_at,
         })
-    return result
+
+    return {
+        "events": result,
+        "next_before_id": rows[-1].id if has_more and rows else None,
+    }
 
 
 def get_transfer_options() -> dict:

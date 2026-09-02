@@ -150,5 +150,11 @@ def transfer_options(case_id):
 @require_access_jwt
 def get_timeline(case_id):
     user = current_user_required()
-    events = case_service.get_case_timeline(case_id, user)
-    return {"events": TimelineEventSchema(many=True).dump(events)}
+    limit = min(int(request.args.get("limit", 50)), 200)
+    before_id_str = request.args.get("before_id")
+    before_id = int(before_id_str) if before_id_str else None
+    result = case_service.get_case_timeline(case_id, user, limit=limit, before_id=before_id)
+    return {
+        "events": TimelineEventSchema(many=True).dump(result["events"]),
+        "next_before_id": result["next_before_id"],
+    }
